@@ -61,7 +61,10 @@ static GLuint prog, vbo, vao;
 static GLuint samplers[32];  // texture filter/wrap combinations (see RenderState.sampler)
 static int rs = 1;
 static int max_scale(void);
-static int ui_filter = 0;  // filter for the 2D interface: 0 GE's own (the default), 1 xBR, 2 bicubic (PANGYA_UI_FILTER)           // render scale: framebuffers are rs times the PSP resolution
+static int ui_filter = 0;  // filter for the 2D interface: 0 GE's own (the default), 1 xBR, 2 bicubic (PANGYA_UI_FILTER)
+// The game's own textures above 1x (not the pack's, not redrawn text), 2D and 3D: 0 as the GE
+// samples them (the default), 1 xBR, 2 sharp pixels (PANGYA_TEX_FILTER; the page's menu)
+static int tex_filter = 0;           // render scale: framebuffers are rs times the PSP resolution
 static GLint u_tex, u_texEnable, u_tfunc, u_tfuncRGBA, u_colorDouble, u_envColor, u_alphaTest, u_atFunc, u_atRef,
 	u_fogEnable, u_fogColor, u_clearMode, u_uvScale, u_blendDouble, u_ctFunc, u_ctRef, u_ctMask, u_xbr, u_lodBias;
 
@@ -203,6 +206,13 @@ static const char *FS =
 	"  acc = clamp(acc, 0.0, 1.0);\n"
 	"  return acc.a > 0.0 ? vec4(min(acc.rgb / acc.a, 1.0), acc.a) : vec4(0.0);\n"
 	"}\n"
+	// Sharp pixels: each texel a flat square, its edge blended over one screen pixel (the GPU's
+	// bilinear does the blend: the sample moves to the texel's center except at its edge).
+	"vec4 sharp(vec2 uv) {\n"
+	"  vec2 sz = vec2(textureSize(u_tex, 0)), tc = uv * sz, k = 1.0 / max(fwidth(tc), vec2(1e-4));\n"
+	"  vec2 cd = fract(tc) - 0.5, rr = max(0.5 - 0.5 / k, 0.0);\n"
+	"  return texture(u_tex, (floor(tc) + (cd - clamp(cd, -rr, rr)) * k + 0.5) / sz);\n"
+	"}\n"
 	"vec4 xbr(vec2 uv) {\n"
 	"  xsz = textureSize(u_tex, 0);\n"
 	"  vec2 tc = uv * vec2(xsz);\n"
@@ -250,7 +260,11 @@ static const char *FS =
 	// (a slight bias toward the full-size picture, -0.25: a tutorial page the game draws at 0.6x
 	// stays sharp instead of mixing in the half-size picture, and the 3D yards keep their outlines
 	// letter by letter; -1 lost them again, 0 blurred the page)
-	"      vec4 t = u_xbr >= 8 ? cubic(uv * u_uvScale) : u_xbr >= 4 ? xbr(uv * u_uvScale) : texture(u_tex, uv * u_uvScale, u_lodBias);\n"
+	// xBR and the sharp pixels only where the texture shows larger than itself: smaller (far away)
+	// they would shimmer, and the plain sampling stands
+	"      vec2 tfw = fwidth(uv * u_uvScale * vec2(textureSize(u_tex, 0))); bool mag = max(tfw.x, tfw.y) < 1.0;\n"
+	"      vec4 t = u_xbr >= 12 && mag ? sharp(uv * u_uvScale) : u_xbr >= 12 ? texture(u_tex, uv * u_uvScale, u_lodBias)\n"
+	"             : u_xbr >= 8 ? cubic(uv * u_uvScale) : u_xbr >= 4 && mag ? xbr(uv * u_uvScale) : texture(u_tex, uv * u_uvScale, u_lodBias);\n"
 	"      vec3 rgb; float a = c.a;\n"
 	"      if (u_tfunc == 0) { rgb = c.rgb * t.rgb; if (u_tfuncRGBA == 1) a = c.a * t.a; }\n"
 	"      else if (u_tfunc == 1) { rgb = u_tfuncRGBA == 1 ? mix(c.rgb, t.rgb, t.a) : t.rgb; }\n"
@@ -349,6 +363,7 @@ void ge_init(void) {
 	rs = sc ? atoi(sc) : 4;
 	if (rs < 1) rs = 1;
 	if (rs > max_scale()) rs = max_scale();
+	if (getenv("PANGYA_TEX_FILTER")) ge_set_tex_filter(atoi(getenv("PANGYA_TEX_FILTER")));
 	const char *uf = getenv("PANGYA_UI_FILTER");
 	if (uf) ui_filter = atoi(uf) >= 0 && atoi(uf) <= 2 ? atoi(uf) : 0;
 	static const char *const ui_names[] = {"off", "xBR", "bicubic"};
@@ -495,6 +510,14 @@ void ge_set_render_scale(int n) {
 	for (int i = 0; i < MAX_TEX; i++) texcache[i].hash = 0, texcache[i].checked = 0;
 	gl_invalidate();
 	rt_log("GE: rendering at %dx (%dx%d)", rs, 480 * rs, 272 * rs);
+}
+
+int ge_tex_filter(void) { return tex_filter; }
+
+void ge_set_tex_filter(int mode) {
+	if (mode < 0 || mode > 2) mode = 0;
+	if (mode != tex_filter) rt_log("GE: the game's own textures %s", mode == 1 ? "through xBR" : mode == 2 ? "as sharp pixels" : "as the GE samples them");
+	tex_filter = mode;
 }
 
 void ge_set_ui_filter(int mode) {
@@ -1573,7 +1596,10 @@ static void draw_prim(uint32_t data) {
 		static int mips_on = -1;
 		if (mips_on < 0) mips_on = !getenv("PANGYA_TEXPACK_MIPS") || atoi(getenv("PANGYA_TEXPACK_MIPS")) != 0;
 		if (tex_scale > 1.f) st.sampler |= 3 | (tex_mips && mips_on ? 16 : 0);  // finer than the GE's texture: smooth sampling
-		else if (ui_filter && rs > 1 && f.through && !tex_from_fbo)
+		else if (tex_filter && rs > 1 && !tex_from_fbo) {
+			st.xbr = 4 * (tex_filter == 1 ? 1 : 3) + (int)(wrap & 1) + 2 * (int)((wrap >> 8) & 1);
+			if (tex_filter == 2) st.sampler |= 3;  // the sharp pixels' edges come from bilinear
+		} else if (ui_filter && rs > 1 && f.through && !tex_from_fbo)
 			st.xbr = 4 * ui_filter + (int)(wrap & 1) + 2 * (int)((wrap >> 8) & 1);
 	}
 

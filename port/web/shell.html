@@ -331,6 +331,8 @@
 
     <h2>Video</h2>
     <div class="row"><span>Fullscreen<br><span class="sub">Also F11 or double click</span></span><button id="fs">Enter</button></div>
+    <div class="row"><span>Internal resolution<br><span class="sub">The PSP's 480x272 drawn this many times larger (lower: lighter for the computer)</span></span><div class="seg" id="scale"></div></div>
+    <div class="row"><span>Original textures<br><span class="sub">The game's own pictures: smooth as the PSP filters them, sharp (xBR) or as crisp pixels; Sharp and Pixels turn the HD textures off</span></span><div class="seg" id="texf"></div></div>
 
     <div class="row"><span>HD textures<br><span class="sub">The texture pack in build/textures; off: the game's own textures</span></span><button id="hd">On</button></div>
 
@@ -373,6 +375,8 @@ if (!window.pangyaMobile) {
                         square: 'KeyA', triangle: 'KeyS', l: 'KeyQ', r: 'KeyW', start: 'Enter', select: 'Backspace',
                         aup: 'KeyI', adown: 'KeyK', aleft: 'KeyJ', aright: 'KeyL'};
   const STICKS = [[0, 'Left stick'], [2, 'Right stick']];
+  const SCALES = [[1, '1x'], [2, '2x'], [3, '3x'], [4, '4x']];
+  const TEX_FILTERS = [[0, 'Smooth'], [1, 'Sharp'], [2, 'Pixels']];
   // Standard gamepad layout indices.
   const DEFAULT_PAD = {up: 12, down: 13, left: 14, right: 15, cross: 0, circle: 1, square: 2, triangle: 3, l: 4, r: 5,
                        start: 9, select: 8};
@@ -388,7 +392,10 @@ if (!window.pangyaMobile) {
       keys: Object.assign({}, DEFAULT_KEYS, s.keys || {}),
       pad: Object.assign({}, DEFAULT_PAD, s.pad || {}),
       padStick: s.padStick === 2 ? 2 : 0,
-      hd: s.hd !== false,  // the texture pack: on when there is one
+      // By default 4x with the HD textures (the game's own ones smooth).
+      hd: s.hd !== false && !(s.texFilter > 0),  // the texture pack: on when there is one (not with sharp originals)
+      scale: [1, 2, 3, 4].includes(s.scale) ? s.scale : 4,  // the render scale
+      texFilter: [0, 1, 2].includes(s.texFilter) ? s.texFilter : 0,  // the game's own textures: 0 smooth, 1 xBR, 2 pixels
     };
   }
   const settings = loadSettings();
@@ -414,6 +421,11 @@ if (!window.pangyaMobile) {
 
   function applyHd() {
     Module.pangyaHd = {on: settings.hd, dirty: true};
+  }
+  // The render scale and the filter for the game's own textures (platform_web.c), while it runs.
+  function applyVideo() {
+    Module.pangyaLive = {scale: settings.scale, uiFilter: 0, dirty: true};
+    Module.pangyaTexFilter = {mode: settings.texFilter, dirty: true};
   }
 
   // ---- Menu ------------------------------------------------------------------------------------
@@ -463,6 +475,14 @@ if (!window.pangyaMobile) {
       b.textContent = on ? 'On' : 'Off';
       b.setAttribute('aria-pressed', String(on));
     }
+    segButtons(document.getElementById('scale'), SCALES, settings.scale, (n) => {
+      settings.scale = n; saveSettings(); applyVideo(); render();
+    });
+    segButtons(document.getElementById('texf'), TEX_FILTERS, settings.texFilter, (n) => {
+      settings.texFilter = n;
+      if (n > 0 && settings.hd) { settings.hd = false; applyHd(); }  // crisp originals: the HD textures off
+      saveSettings(); applyVideo(); render();
+    });
     segButtons(document.getElementById('stick'), STICKS, settings.padStick, (n) => {
       settings.padStick = n; saveSettings(); applyInput(); render();
     });
@@ -524,7 +544,9 @@ if (!window.pangyaMobile) {
   document.getElementById('fs').addEventListener('click', toggleFullscreen);
   document.getElementById('full').addEventListener('click', toggleFullscreen);
   document.getElementById('hd').addEventListener('click', () => {
-    settings.hd = !settings.hd; saveSettings(); applyHd(); render();
+    settings.hd = !settings.hd;
+    if (settings.hd && settings.texFilter) { settings.texFilter = 0; applyVideo(); }  // the HD textures: smooth originals
+    saveSettings(); applyHd(); render();
   });
   canvas.addEventListener('dblclick', toggleFullscreen);
 
@@ -695,8 +717,10 @@ if (!window.pangyaMobile) {
     onAbort: showCrash,
     setStatus: (t) => { statusEl.textContent = t || ''; },
     preRun: [() => {
-      // Rendering at 4x with the interface's original filtering (fixed; URL parameters become
-      // environment variables, e.g. ?PANGYA_SCALE=2 for a test).
+      // The render scale and the original textures' filter from the menu (URL parameters become
+      // environment variables and win, e.g. ?PANGYA_SCALE=2 for a test).
+      ENV.PANGYA_SCALE = String(settings.scale);  // the menu's (a URL parameter below wins, for tests)
+      ENV.PANGYA_TEX_FILTER = String(settings.texFilter);
       for (const [k, v] of new URLSearchParams(location.search)) ENV[k] = v;
       // The player's save, kept in the project folder by the page's server (serve_web.py: the
       // main save, or the player's own); without that server it stays in this browser (IndexedDB).

@@ -20,6 +20,7 @@ void plat_debug_upload(const char *path, const char *name);
 bool plat_poll_settings(int *scale, int *ui_filter);  // settings changed by the user (web menu)
 bool plat_poll_text(int *strings, int *ui);  // text drawing switched in the web menu (1 on, 0 off)
 bool plat_poll_hd(int *on);  // the HD textures (texture pack) switched in the web menu
+bool plat_poll_texfilter(int *mode);  // the filter for the game's own textures, from the web menu
 // Web: fetch url from the page's server into the file path (path.failed appears if that fails).
 // Native: not used (files are read from disk).
 void plat_fetch(const char *url, const char *path);

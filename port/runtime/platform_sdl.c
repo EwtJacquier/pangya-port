@@ -103,6 +103,7 @@ void plat_debug_upload(const char *path, const char *name) { (void)path, (void)n
 bool plat_poll_settings(int *scale, int *ui_filter) { (void)scale, (void)ui_filter; return false; }
 bool plat_poll_text(int *strings, int *ui) { (void)strings, (void)ui; return false; }
 bool plat_poll_hd(int *on) { (void)on; return false; }
+bool plat_poll_texfilter(int *mode) { (void)mode; return false; }
 void plat_fetch(const char *url, const char *path) { (void)url, (void)path; }
 
 // Audio goes through SDL's queue: the runtime pushes frames as wall-clock time passes and the

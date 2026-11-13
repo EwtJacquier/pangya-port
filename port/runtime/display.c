@@ -181,6 +181,11 @@ void platform_vblank(void) {
 	int vec_strings, vec_ui, hd;
 	if (plat_poll_text(&vec_strings, &vec_ui) && text_set_vector(vec_strings, vec_ui)) ge_forget_textures();
 	if (plat_poll_hd(&hd) && texpack_set_enabled(hd)) ge_forget_textures();
+	int tex_mode;
+	if (plat_poll_texfilter(&tex_mode) && tex_mode != ge_tex_filter()) {
+		ge_set_tex_filter(tex_mode);
+		ge_forget_textures();  // atlases drawn again (text.h) follow it
+	}
 	if (inject_left > 0) {
 		inject_left--;
 		buttons |= inject_mask;

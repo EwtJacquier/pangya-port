@@ -119,6 +119,17 @@ EM_JS(int, js_poll_hd, (int *on), {
 
 bool plat_poll_hd(int *on) { return js_poll_hd(on); }
 
+// The filter for the game's own textures (Module.pangyaTexFilter = {mode, dirty}).
+EM_JS(int, js_poll_texfilter, (int *mode), {
+	const s = Module.pangyaTexFilter;
+	if (!s || !s.dirty) return 0;
+	s.dirty = false;
+	HEAP32[mode >> 2] = s.mode | 0;
+	return 1;
+});
+
+bool plat_poll_texfilter(int *mode) { return js_poll_texfilter(mode); }
+
 // Audio output lives in web/audio.js (AudioWorklet FIFO); chunks are copied out of the heap.
 EM_JS(void, js_audio_push, (const int16_t *p, int n), {
 	if (Module.pangyaAudioPush) Module.pangyaAudioPush(HEAP16.slice(p >> 1, (p >> 1) + n * 2));

@@ -12,6 +12,8 @@ void ge_unbind_target(void);
 void ge_draw_stats(uint64_t *draws, uint64_t *batches);
 int ge_render_scale(void);
 void ge_set_render_scale(int n);  // 1..6, takes effect immediately
+void ge_set_tex_filter(int mode);
+int ge_tex_filter(void);  // the game's own textures: 0 GE's own filtering, 1 xBR, 2 sharp pixels
 void ge_set_ui_filter(int mode);  // 2D interface filter: 0 GE's own, 1 xBR, 2 bicubic
 void ge_forget_textures(void);  // every texture looked up and drawn again (texture pack, text drawing)
 void ge_frame_mark(void);  // called at sceDisplaySetFrameBuf

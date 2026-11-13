@@ -1,0 +1,44 @@
+# Guest functions replaced by hand-written C in mods/*.c (the original stays callable as f_X_orig).
+08885fd0  # CClientSetting::Load (parses ClientSetting.txt) -> mods/client_settings.c
+0887007c  # loading-done callback (waits for the boot logos) -> mods/boot.c
+089ec928  # title screen update (New Game / Load Game: one Start Game button) -> mods/autoload.c
+089e4824  # text cache entry finished (font engine) -> mods/font.c (the HD font)
+0887f60c  # title plays the opening movie -> mods/boot.c
+089edc28  # title screen drawing (its two buttons) -> mods/autoload.c
+08983f14  # draw a UI sprite by name -> mods/autoload.c (only while the title draws)
+08984678  # draw a UI sprite by name, with alpha -> mods/autoload.c (only while the title draws)
+088661cc  # is an input action pressed (by name) -> mods/autoload.c (the title's d-pad)
+089e9570  # out-game scene update (every frame in the menus) -> mods/unlock.c
+08a5d718  # shop: builds the costume list -> mods/unlock.c (every item listed)
+08a5e4f4  # shop: builds the other categories' lists -> mods/unlock.c
+088c45c0  # network round update (sends / takes in the players' state) -> mods/netplay.c (scores on the right hole)
+08b04438  # ad hoc: receive one message per player slot -> mods/netplay.c (reads them during the round update)
+08af9f64  # the game's debug printf (empty in the release build) -> mods/turns.c (PANGYA_GAME_LOG=1)
+088a04c0  # round / hole setup (builds the players) -> mods/turns.c (type 8: the room's players)
+08883940  # number of characters on the course -> mods/turns.c
+088b0930  # sets up one player's character -> mods/turns.c
+088a2070  # the round rule update (every frame) -> mods/turns.c (PANGYA_NET_TRACE: the turn state)
+089b9b1c  # network room update (every frame in the room) -> mods/turns.c (players send their profiles)
+0890d788  # draws the letters ("Your Turn") -> mods/turns.c (the turn is this copy's player's)
+088be948  # works out a shot when it is hit (mode 0x40) -> mods/turns.c (same random numbers on every copy)
+088c20ac  # takes in the shot message 0x20 -> mods/turns.c (in turns: from the mod's message, when ready)
+088ed920  # the Player actor's messages -> mods/turns.c (0xf8: the shot's direction, the player's)
+088abdf8  # the give-up pose (mode 0x80000) -> mods/turns.c (in turns the hole ends when everyone is done)
+088bb74c  # a shot's prize -> mods/turns.c (in turns only this copy's player's shots)
+088b5dbc  # CGolfRule mode change -> mods/turns.c (the game over runs as a type-5 round)
+088c59d0  # fills the state message 0x23 (SEND INFO) -> mods/turns.c (in turns: this copy's player and ball)
+0892a8b8  # the rank screen after the last hole -> mods/turns.c (PANGYA_NET_TRACE: its state)
+089366dc  # the board update (after the last hole: the rank screen) -> mods/turns.c (tests: autoplay)
+08925708  # lays out the results after the last hole -> mods/turns.c (type 8 laid out as 5)
+088f4a34  # the end scene's players -> mods/turns.c (one, as at the end of a match against the computer)
+089cac24  # releases a character model's resources -> mods/turns.c (same character twice: shared ones once)
+088f10a4  # sets up the end scene's characters -> mods/turns.c (this copy's player as player 0)
+088ed73c  # the Player actor's destructor -> mods/turns.c (facial lists swapped back)
+088f5064  # can the character stand there (+0x179e NoPlay: drawn see-through) -> mods/turns.c (not checked at the round's end)
+088fb284  # the HUD's "player i" getter -> mods/turns.c (in turns: this copy's player as player 0)
+088fe81c  # the round's HUD (every frame) -> mods/turns.c (in turns: drawn as this copy's player's)
+08906e40  # the HUD's player cards -> mods/turns.c (in turns: only the current player's, on the left)
+088d6574  # the Spot actor's drawing (landing mark, ball markers) -> mods/spot.c (in turns: no ball markers)
+088af1c0  # works out the places after a hole -> mods/turns.c (in turns: from the players, the network board never sorts them)
+0896e760  # the distance to the hole's label (update) -> mods/turns.c (in turns: shown from the start of every turn)
+08952344  # letters in the course (the yards over the landing mark) -> mods/spot.c (drawn as the view from above draws them)

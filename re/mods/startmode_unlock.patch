@@ -1,0 +1,4 @@
+# Libera m_diStartMode acima de 4 no ClientSetting.txt (FUN_08883594 limitava a 0..4).
+# Com isto, m_diStartMode 15 abre o modo escondido CLunaTask (CGolfDoc).
+[StartMode ate 15 (CLunaTask)]
+0x08883640 3406000F    # ori a2, zero, 4  ->  ori a2, zero, 15  (limite maximo do clamp)

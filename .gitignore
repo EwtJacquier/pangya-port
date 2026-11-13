@@ -1,0 +1,21 @@
+# Game data (never commit)
+*.iso
+*.elf
+*.bin
+EBOOT*
+
+# Build outputs and regenerable data
+build/
+port/build/
+port/generated/
+re/ghidra_project/
+re/export/functions.jsonl
+re/export/names_*.jsonl
+re/export/*.log
+*.o
+__pycache__/
+port/third_party/ffmpeg/*/lib/
+
+# Secrets (LiveKit credentials in port/.env)
+.env
+*.env

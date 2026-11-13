@@ -1,0 +1,1575 @@
+# Text of the UI sprites, transcribed by hand from the original images (atlas, sprite name, text;
+# "|" separates lines). tools/uitext/build.py takes these as the text and only fits the style.
+# "@x,y,w,h text": the text is in that box of the sprite (art around it stays as it is).
+[font_mission_success	fail_I	1,164,66,35	Fail
+[message_out	out_select.Z	36,80,178,12	Please make a selection.
+[message_out	out_place_Z	1,32,252,47	You can't take a shot in this area.|Return to the previous ball|placement with a 1 stroke penalty?
+[message_out	out_massage_Z	19,1,209,30	Your current progress will be|lost if you quit the game.
+[message_out_net	out_sleep_Z	48,69,154,20	Entered sleep mode and|the connection was lost.
+[message_out_net	out_connot_Z	60,41,136,27	Cannot connect to|other players.
+[message_out_net	out_error_Z	36,28,183,12	A network error occurred.
+[message_out_net	out_lan_off_Z	38,15,173,12	The WLAN switch is OFF.
+[message_out_net	out_massage2_Z	58,1,131,13	has left the game.
+_loading	txt_nowloading_I	1,1,121,21	Now Loading...
+_loading	txt_nowloading_g_I	1,23,117,17	@0,0,117,17 Now Loading...
+bongshop_ui	item_button	276,197,116,20	@25,2,89,17 Acquired Items
+bongshop_ui	item_title	18,451,227,36	Acquired Items
+bongshop_ui	pang_mine	429,7,77,27	@12,3,63,20 My Pang
+bongshop_ui	notice_title_text_C	19,488,228,17	These items are available now!
+bongshop_ui	text_start_C	397,76,48,19	START
+bongshop_ui	text_exit_C	397,56,41,19	Exit
+bongshop_ui	text_bongtitle_C	397,35,89,20	Papel Shop
+ch_select	name_?	336,97,60,31	???
+ch_select	name_Max	85,281,67,34	Max
+ch_select	name_Cien	166,306,70,35	Cien
+ch_select	name_Kaz	176,342,57,34	Kaz
+ch_select	name_Arin	149,377,60,34	Arin
+ch_select	name_Nuri	169,271,89,34	Scout
+ch_select	name_Cecilia	304,347,103,34	Cecilia
+ch_select	name_Hana	204,235,83,35	Hana
+ch_select	name_Kooh	6,356,77,34	Kooh
+ch_select	name_Azer	248,165,151,34	Uncle Bob
+ch_select	name_Darktitan	342,309,104,34	D.Titan
+ch_select	name_Keeper	259,271,108,36	Keeper
+ch_select	name_Quma	288,235,93,34	Quma
+ch_select	name_Tiki	337,200,52,34	Tiki
+ch_select	name_Mingty	238,308,102,36	Mingty
+ch_select	name_Titanboo	201,200,134,34	Titanboo
+ch_select	name_Lolo	238,346,65,34	Lola
+ch_select	name_Cadie	84,351,58,34	Brie
+ch_select	name_Pipin	86,316,73,34	Pipin
+ch_select	sub_3	84,386,62,24	Ability
+ch_select	title	247,145,125,19	Character Select
+ch_select	gauge_curve_A	7,341,51,14	Curve
+ch_select	gauge_spin_A	7,326,51,14	Spin
+ch_select	gauge_impact_A	6,311,52,14	Accuracy
+ch_select	gauge_control_A	7,296,51,14	Control
+ch_select	gauge_power_A	7,281,51,14	Power
+change	change_title	55,193,137,19	Character Select
+change	change_loading	55,213,241,54	@16,16,143,25 Loading character
+change_myroom	change_title	55,193,137,19	Character Select
+change_myroom	change_loading	55,213,241,54	@16,16,143,25 Loading character
+change_myroom	BigTiki	50,322,40,26	Tiki
+change_myroom	BigArin	1,322,48,26	Arin
+change_myroom	BigWho	311,295,48,26	???
+change_myroom	BigKooh	248,295,62,26	Kooh
+change_myroom	BigKaz	201,295,46,26	Kaz
+change_myroom	BigTitanboo	141,352,105,26	TitanBoo
+change_myroom	BigLolo	87,349,53,26	Lola
+change_myroom	BigCien	316,268,55,26	Cien
+change_myroom	BigKeeper	1,349,85,29	Keeper
+change_myroom	BigPipin	256,322,59,29	Pipin
+change_myroom	BigMingty	174,322,81,29	Mingty
+change_myroom	BigDarktitan	91,322,82,26	D.Titan
+change_myroom	BigMax	261,268,54,26	Max
+change_myroom	BigCecilia	119,295,81,26	Cecilia
+change_myroom	BigAzer	1,295,117,26	Uncle Bob
+change_myroom	BigQuma	186,268,74,26	Quma
+change_myroom	BigHana	119,268,66,26	Hana
+change_myroom	BigCadie	72,268,46,26	Brie
+change_myroom	BigNuri	1,268,70,26	Scout
+common	delete	166,124,68,19	Delete
+common	back	107,124,57,19	Back
+common	release	161,104,80,19	Remove
+common	equip	1,104,61,19	Equip
+common	select	1,84,41,19	OK
+common	move	1,64,63,19	Move
+common	move_2	1,44,63,19	Move
+common	move_3	1,24,63,19	Move
+common	help	1,124,55,19	Help
+equipment	txt_next_off	446,151,54,18	Next
+equipment	txt_start_off	385,151,60,23	Start
+equipment	txt_change_off_Z	374,310,95,23	@35,0,60,23 Character|Select
+equipment	txt_change_on_Z	390,1,121,29	@49,0,72,29 Character|Select
+equipment	ShopIconSmall_C	305,202,94,20	Shop
+equipment	MyroomIconSmall_C	305,223,94,20	My Room
+equipment	ShopIconBig_C	390,31,104,28	Shop
+equipment	MyroomIconBig_C	390,60,104,28	My Room
+equipment	txt_no_tem_C	295,394,195,25	@12,3,172,19 You can't select this item.
+equipment	TextItemManage_C	300,281,183,20	Equipment Management
+equipment	bonus_frame	394,124,116,26	@25,9,41,13 Bonus
+equipment	BigNuri	187,148,70,26	Scout
+equipment	BigHana	187,175,66,26	Hana
+equipment	BigAzer	187,202,117,26	Uncle Bob
+equipment	BigCecil	188,229,81,26	Cecilia
+equipment	BigMax	188,256,54,26	Max
+equipment	BigKoo	188,283,62,26	Kooh
+equipment	BigArin	189,310,48,26	Arin
+equipment	BigKaz	243,256,46,26	Kaz
+equipment	BigCien	189,364,55,26	Cien
+equipment	BigPipin	361,334,59,29	Pipin
+equipment	BigTitang	189,391,105,26	TitanBoo
+equipment	BigLolo	245,364,53,26	Lola
+equipment	BigQuma	254,175,74,26	Quma
+equipment	BigTiki	238,310,40,26	Tiki
+equipment	BigKadie	258,148,46,26	Brie
+equipment	BigMingty	279,334,81,29	Mingty
+equipment	BigDarkTitang	189,337,82,26	D.Titan
+equipment	BigKeeper	421,334,85,29	Keeper
+equipment	TextChangeClub_C	453,207,41,17	Clubs
+equipment	TextChangeRing_C	381,99,39,17	Rings
+equipment	TextChangeAztec_C	323,153,50,17	Aztecs
+equipment	TextChangeBong_C	323,135,50,17	Papels
+equipment	TextChangeItem_C	323,117,40,17	Items
+equipment	TextEquipedItem_C	302,99,78,17	Equipment
+equipment	ItemChangeText1_C	329,175,30,20	Add
+equipment	ItemChangeText2_C	361,175,53,20	Remove
+equipment	txt_start_on	430,89,80,34	Start
+equipment	txt_next_on	344,244,44,34	Next
+equipment	BigWho	251,283,48,26	???
+equipment	txt_change_on_no_Z	299,364,120,29	@48,0,72,29 Character|Select
+equipment	txt_change_off_no_Z	279,310,94,23	@34,0,60,23 Character|Select
+gallery_512	title_music_C	362,187,77,43	@30,15,47,23 Music
+gallery_512	title_image_C	362,143,89,43	@29,15,60,24 Artwork
+gallery_512	title_video_C	362,99,85,43	@29,15,56,24 Videos
+gallery_512	gallery_title_C	362,79,56,19	Gallery
+gift_name	gift_txt_54	295,292,145,16	Arin Costume Set
+gift_name	gift_txt_53	295,275,145,16	Arin Costume Set
+gift_name	gift_txt_40	1,258,145,16	Arin Costume Set
+gift_name	gift_txt_35	295,172,145,16	Arin Costume Set
+gift_name	gift_txt_30	148,189,145,16	Arin Costume Set
+gift_name	gift_txt_28	148,155,145,16	Arin Costume Set
+gift_name	gift_txt_21	1,138,145,16	Arin Costume Set
+gift_name	gift_txt_20	1,121,145,16	Arin Costume Set
+gift_name	gift_txt_18	295,86,145,16	Arin Costume Set
+gift_name	gift_txt_10	148,52,145,16	Arin Costume Set
+gift_name	gift_txt_52	295,258,145,16	Cecilia Costume Set
+gift_name	gift_txt_50	295,224,145,16	Cecilia Costume Set
+gift_name	gift_txt_45	148,241,145,16	Cecilia Costume Set
+gift_name	gift_txt_41	1,275,145,16	Cecilia Costume Set
+gift_name	gift_txt_37	1,207,145,16	Cecilia Costume Set
+gift_name	gift_txt_33	295,138,145,16	Cecilia Costume Set
+gift_name	gift_txt_27	148,138,145,16	Cecilia Costume Set
+gift_name	gift_txt_51	295,241,145,16	Kooh Costume Set
+gift_name	gift_txt_47	148,275,145,16	Kooh Costume Set
+gift_name	gift_txt_42	1,292,145,16	Kooh Costume Set
+gift_name	gift_txt_38	1,224,145,16	Kooh Costume Set
+gift_name	gift_txt_31	295,104,145,16	Kooh Costume Set
+gift_name	gift_txt_24	1,189,145,16	Kooh Costume Set
+gift_name	gift_txt_23	1,172,145,16	Kooh Costume Set
+gift_name	gift_txt_17	295,69,145,16	Kooh Costume Set
+gift_name	gift_txt_14	295,18,145,16	Kooh Costume Set
+gift_name	gift_txt_49	295,207,145,16	Kaz Costume Set
+gift_name	gift_txt_32	295,121,145,16	Kaz Costume Set
+gift_name	gift_txt_26	148,121,145,16	Kaz Costume Set
+gift_name	gift_txt_13	295,1,145,16	Kaz Costume Set
+gift_name	gift_txt_48	148,292,145,16	Uncle Bob Costume Set
+gift_name	gift_txt_39	1,241,145,16	Uncle Bob Costume Set
+gift_name	gift_txt_34	295,155,145,16	Uncle Bob Costume Set
+gift_name	gift_txt_22	1,155,145,16	Uncle Bob Costume Set
+gift_name	gift_txt_46	148,258,145,16	Scout Costume Set
+gift_name	gift_txt_44	148,224,145,16	Scout Costume Set
+gift_name	gift_txt_43	148,207,145,16	Hana Costume Set
+gift_name	gift_txt_36	295,189,145,16	Hana Costume Set
+gift_name	gift_txt_29	148,172,145,16	Hana Costume Set
+gift_name	gift_txt_19	1,104,145,16	Hana Costume Set
+gift_name	gift_txt_15	295,35,145,16	Hana Costume Set
+gift_name	gift_txt_11	148,69,145,16	Hana Costume Set
+gift_name	gift_txt_25	148,104,145,16	Max Costume Set
+gift_name	gift_txt_16	295,52,145,16	Max Costume Set
+gift_name	gift_txt_12	148,86,145,16	Max Costume Set
+gui_bonus	bonus_frame	1,1,116,26	@25,9,41,13 Bonus
+gui_font	[ground_text_01	1,16,94,17	Flying Distance
+gui_font	txt_remain	1,1,110,14	Distance to Hole
+gui_font	[ground_text_02	1,34,92,17	Distance to Hole
+gui_item	itemname0	1,111,77,11	Spin Mastery
+gui_item	itemname1	84,111,77,11	Curve Mastery
+gui_item	itemname2	177,111,77,11	Strength Boost
+gui_item	itemname3	1,123,77,11	Miracle Sign
+gui_item	itemname4	1,135,77,11	Silent Wind
+gui_item	itemname13	1,159,77,11	Power Milk
+gui_item	itemname12	177,147,77,11	Duostar LS
+gui_item	itemname11	84,147,77,11	Duostar SS
+gui_item	itemname10	1,147,77,11	Duostar PS
+gui_item	itemname9	84,159,77,11	Amnesia Flower
+gui_item	itemname8	177,135,77,11	Duostar NS
+gui_item	itemname7	84,135,77,11	Duostar LP
+gui_item	itemname6	84,123,77,11	Generic NS
+gui_item	itemname5	177,123,77,11	Generic LP
+gui_mission	mission_title	194,1,61,27	Mission
+gui_mission	offline	187,142,49,14	Off-line
+gui_mission	hole_out	187,127,54,14	Hole Out
+gui_mission	wait_message	1,178,247,19	Please wait.
+gui_mission	info_8p	113,168,15,9	8P
+gui_mission	info_7p	97,168,15,9	7P
+gui_mission	info_6p	81,168,15,9	6P
+gui_mission	info_5p	65,168,15,9	5P
+gui_mission	info_4p	49,168,15,9	4P
+gui_mission	info_3p	33,168,15,9	3P
+gui_mission	info_2p	17,168,15,9	2P
+gui_mission	info_1p	1,168,15,9	1P
+gui_mission	remain_title	1,126,70,41	Distance|to Hole
+gui_mission	count_title	116,65,97,61	@12,1,74,20 Attempts
+gui_mission	rank_title	1,65,114,21	Rank
+gui_uv_1	mask_giveup	67,164,65,40	@15,7,36,30 Give|Up
+gui_uv_1	mask_holeout	1,164,65,40	@15,5,36,15 Hole
+gui_uv_1	mask_holeout	1,164,65,40	@15,19,36,14 Out
+gui_uv_1	SPECIAL_SHOT(ÆÄ¿öÅä¸¶È£Å©)	120,29,111,11	Power Tomahawk :
+gui_uv_1	SPECIAL_SHOT(ÄÚºê¶ó)	210,15,41,11	Cobra :
+gui_uv_1	SPECIAL_SHOT(½ºÆÄÀÌÅ©)	157,1,39,13	Spike :
+gui_uv_1	SPECIAL_SHOT(ÆÄ¿öÄÚºê¶ó)	1,55,82,11	Power Cobra :
+gui_uv_1	SPECIAL_SHOT(ÆÄ¿ö½ºÆÄÀÌÅ©)	80,41,80,13	Power Spike :
+gui_uv_1	SPECIAL_SHOT(Åä¸¶È£Å©)	1,109,71,11	Tomahawk :
+gui_uv_1	HOLEIN(¿À¹öÆÄ)	1,69,59,11	Over Par :
+gui_uv_1	HOLEIN(ÆÄ)	39,1,29,11	Par :
+gui_uv_1	HOLEIN(¹öµð)	78,29,41,11	Birdie :
+gui_uv_1	HOLEIN(¾Ë¹ÙÆ®·Î½º)	75,15,62,11	Albatross :
+gui_uv_1	HOLEIN(È¦ÀÎ¿ø)	1,29,74,11	Hole In One :
+gui_uv_1	HOLEIN(ÀÌ±Û)	197,1,39,13	Eagle :
+gui_uv_1	RECOVERY_BONUS	1,81,72,13	Rain Bonus :
+gui_uv_1	CLASH_COMBO	62,69,82,11	Clash Combo :
+gui_uv_1	LONG_CHIPIN	1,41,77,13	Long Chip In :
+gui_uv_1	BEAM_IMPACT	73,109,83,13	Beam Impact :
+gui_uv_1	POWER_CURVE	103,81,83,11	Power Curve :
+gui_uv_1	POWER_SPIN	1,15,73,13	Power Spin :
+gui_uv_1	SPECIAL_BONUS	1,95,87,13	Special Bonus :
+gui_uv_1	AZTEC_BONUS	146,69,80,11	Aztec Bonus :
+gui_uv_1	NICE_RECOVERY	161,41,90,13	Nice Recovery :
+gui_uv_1	CLEAR_BONUS	166,95,77,11	Clear Bonus :
+gui_uv_1	APPROACH	84,55,88,13	Nice Approach :
+gui_uv_1	SUPER_PANGYA	69,1,86,13	Super Pangya :
+gui_uv_1	LONG_PUTT	174,55,64,13	Long Putt :
+gui_uv_1	OVER_DRIVE	139,15,69,11	Over Drive :
+gui_uv_1	BONUS_PANG	89,95,76,13	Bonus Pang :
+gui_uv_1	PANG	1,1,37,13	Pang :
+gui_uv_1	msg_max	187,81,31,13	MAX
+gui_uv_1	msg_powertomahawk	197,116,57,19	Power|Tomahawk
+gui_uv_1	msg_powerspike	189,136,61,12	PowerSpike
+gui_uv_1	msg_powercobra	125,136,63,12	PowerCobra
+gui_uv_1	msg_spike	156,123,28,12	Spike
+gui_uv_1	msg_cobra	125,123,30,12	Cobra
+gui_uv_1	msg_superpangya	57,136,67,12	SuperPangya
+gui_uv_1	msg_tomahawk	67,123,57,12	Tomahawk
+gui_uv_1	msg_powercurve	1,123,65,12	PowerCurve
+gui_uv_1	msg_powerspin	1,136,55,12	PowerSpin
+gui_uv_1	msg_pangya	157,110,39,12	Pangya
+gui_uv_1	msg_bad	219,81,20,12	Bad
+gui_uv_1	msg_powerspike_fail	191,177,61,12	PowerSpike
+gui_uv_1	msg_powercobra_fail	191,190,63,12	PowerCobra
+gui_uv_1	msg_spike_fail	222,164,28,12	Spike
+gui_uv_1	msg_tomahawk_fail	133,184,57,12	Tomahawk
+gui_uv_1	msg_cobra_fail	191,164,30,12	Cobra
+gui_uv_1	msg_powertomahawk_fail	133,164,57,19	Power|Tomahawk
+gui_uv_2	icon_move	1,234,102,16	Move
+gui_uv_2	icon_zoom	1,217,102,16	Zoom in
+gui_uv_2	icon_shot	1,200,102,16	Shot Mode
+gui_uv_2	icon_skip	1,183,76,16	F.F
+gui_uv_2	icon_replay	1,166,76,16	Replay
+gui_uv_2	btn_item	109,125,74,16	Item
+gui_uv_2	info_02	114,90,69,34	@2,2,36,15 Shot
+gui_uv_2	info_02	114,90,69,34	@2,17,42,15 Score
+gui_uv_2	font2_par	233,230,22,14	Par
+gui_uv_2	font2_hole	225,215,29,14	Hole
+license	slot3_h	193,244,88,42	@3,13,26,17 EXP
+license	slot_pang_H_C	228,195,53,27	Pang
+license	slot_chipin_H_C	228,167,66,27	Chip-in
+license	slot_score_H_C	228,142,56,24	Score
+license	slot_approach_H_C	228,113,96,28	Approach
+license	slot_holeinone_H_C	228,88,95,24	Hole-in-one
+license	license_C	228,50,65,18	License
+license	subtitle_C	228,69,105,18	License Mode
+license	minipopup	1,309,275,52	@18,12,204,23 A new mission is available.
+license_2	slot3	195,1,86,42	@3,13,26,17 EXP
+license_2	slot_pang_C	146,129,67,21	Pang
+license_2	slot_chipin_C	146,106,67,22	Chip-in
+license_2	slot_score_C	146,86,67,19	Score
+license_2	slot_approach_C	146,64,88,21	Approach
+license_2	slot_holeinone_C	146,44,89,19	Hole-in-one
+license_2	success_h	1,115,84,32	@6,5,75,22 Success!
+license_2	success	1,82,82,32	@5,5,72,22 Success!
+license_2	txt_get_C	1,234,257,36	License Acquired!
+license_2	txt_success_C	1,200,242,32	Mission  Success!
+license_2	tournament	1,336,109,23	@23,2,84,18 Tournament
+licensetxt	name_bluelagoon_Z	1,1,153,31	Blue Lagoon
+licensetxt	name_bluemoon_Z	112,100,128,27	Blue Moon
+licensetxt	name_sepiawind_Z	1,33,137,32	Sepia Wind
+licensetxt	name_pinkwind_Z	122,131,118,27	Pink Wind
+licensetxt	name_windhill_Z	1,66,105,30	Wind Hill
+licensetxt	name_deepinferno_Z	166,232,89,50	Deep|Inferno
+licensetxt	name_westwiz_Z	1,97,110,30	West Wiz
+licensetxt	name_wizwiz_Z	155,2,92,30	Wiz Wiz
+licensetxt	name_whitewiz_Z	1,128,120,30	White Wiz
+licensetxt	comment_whitewiz_Z	1,389,223,33	An intermediate course where|the ball slides on the ice.
+licensetxt	comment_wizwiz_Z	1,178,195,34	An advanced course on|complex terrain in fog.
+licensetxt	comment_westwiz_Z	1,159,216,18	A beginner's course near cliffs.
+licensetxt	comment_deepinferno_Z	1,423,195,35	A longer, advanced course|in whirling volcanic ash.
+licensetxt	comment_windhill_Z	1,353,189,35	An intermediate course|with strong winds.
+licensetxt	comment_pinkwind_Z	1,247,140,35	A beginner's course|on a simple terrain.
+licensetxt	comment_sepiawind_Z	1,319,231,33	A beginner's course with trees|and windmills as obstacles.
+licensetxt	comment_bluemoon_Z	1,283,219,35	An intermediate course under|the starry sky of Pangya Island.
+licensetxt	comment_bluelagoon_Z	1,213,163,33	A beginner's course on|a beautiful beach.
+menu_loading	dolani2_1	1,36,100,34	@12,10,56,17 Loading...
+menu_loading	dolani2_2	1,1,100,34	@12,10,56,17 Loading...
+mission_text	mission_12_Z	62,217,130,11	Exit to menu?
+mission_text	mission_11_Z	18,199,221,17	Take a Spike Shot to the target area.
+mission_text	mission_10_Z	18,181,222,17	Take a Cobra Shot to the target area.
+mission_text	mission_09_Z	10,163,234,17	Take a Power Curve Shot to the target area.
+mission_text	mission_08_Z	3,145,250,17	Take a Tomahawk Shot to the target area.
+mission_text	mission_07_Z	13,127,230,17	Take a Topspin Shot to the target area.
+mission_text	mission_06_Z	13,109,235,17	Take a Backspin Shot to the target area.
+mission_text	mission_05_Z	26,91,204,17	Sink the Aztec in under 4 shots.
+mission_text	mission_04_Z	26,73,204,17	Take a shot to the target area.
+mission_text	mission_03_Z	16,55,224,17	Use the Item and make a Power Shot
+mission_text	mission_02_Z	26,37,204,17	Hit the ball to the target area
+mission_text	mission_01_Z	26,19,204,17	Hit the ball to the target area
+mission_text	mission_00_Z	3,1,250,17	Choose a club to aim the ball at the target area
+mode_match	name	0,0,41,14	Match
+mode_mission	name	0,0,48,14	Mission
+mode_network	name	0,0,53,14	Network
+mode_single	name	0,0,64,14	Free Round
+mode_tournament	name	0,0,73,14	Tournament
+mode_tutorial	name	0,0,48,14	Tutorial
+multi_room_setting	team_off_C	318,160,48,21	Team
+stroke_1	team_off_C	351,301,48,21	Team
+multi_room_setting	single_off_C	318,138,51,21	Single
+stroke_1	single_off_C	351,279,51,21	Single
+multi_room_setting	mode_off_C	318,116,49,21	Mode
+stroke_1	mode_off_C	351,257,49,21	Mode
+multi_room_setting	txt_shuffle_off_C	318,94,67,21	Random
+stroke_1	txt_shuffle_off_C	351,235,67,21	Random
+multi_room_setting	txt_back_off_C	211,226,43,21	Back
+stroke_1	txt_back_off_C	224,367,43,21	Back
+multi_room_setting	txt_front_off_C	211,204,43,21	Front
+stroke_1	txt_front_off_C	224,345,43,21	Front
+multi_room_setting	txt_sequence_off_C	211,182,78,21	Sequence
+stroke_1	txt_sequence_off_C	224,323,78,21	Sequence
+multi_room_setting	txt_18hole_off_C	211,160,36,21	18-H
+multi_room_setting	txt_9hole_off_C	211,138,32,21	9-H
+multi_room_setting	txt_6hole_off_C	211,116,32,21	6-H
+multi_room_setting	txt_3hole_off_C	211,94,32,21	3-H
+multi_room_setting	txt_holes_off_C	100,226,43,21	Holes
+stroke_1	txt_holes_off_C	109,367,43,21	Holes
+multi_room_setting	mode_on_C	100,160,49,21	Mode
+multi_room_setting	txt_front_on_C	100,94,43,21	Front
+multi_room_setting	txt_holes_on_C	1,115,47,21	Holes
+multi_room_setting	single_on_C	100,182,51,21	Single
+multi_room_setting	team_on_C	100,204,48,21	Team
+multi_room_setting	txt_back_on_C	100,116,43,21	Back
+multi_room_setting	txt_shuffle_on_C	100,138,67,21	Random
+multi_room_setting	txt_sequence_on_C	1,225,80,21	Sequence
+multi_room_setting	txt_18hole_on_C	1,203,39,21	18-H
+multi_room_setting	txt_9hole_on_C	1,181,32,21	9-H
+multi_room_setting	txt_6hole_on_C	1,159,32,21	6-H
+multi_room_setting	txt_3hole_on_C	1,137,32,21	3-H
+multi_room_setting	multi_title_C	1,94,64,20	Network
+myroom	icon_new1	345,1,42,14	NEW
+myroom	icon_new2	345,16,42,14	NEW
+myroom	bong_slot	213,189,153,37	Slot
+myroom	collection_A	264,138,96,11	Collection Rate :
+myroom	pang_sum	103,310,122,25	@29,11,35,15 Bonus
+myroom	ch_button_no	1,479,163,31	@47,6,108,20 Character Select
+myroom	ch_button_on	1,383,163,31	@44,4,115,23 Character Select
+myroom	shop_button_no	165,479,123,31	@29,6,88,20 Pangya Shop
+myroom	shop_button_on	165,383,123,31	@26,4,94,23 Pangya Shop
+myroom	shop_button_off	165,415,123,31	@29,6,88,20 Pangya Shop
+myroom	ch_button_off	1,415,163,31	@47,6,108,20 Character Select
+myroom_2	collection_100	56,182,36,16	100%
+myroom_2	gauge_curve_A	45,165,37,14	Curve
+myroom_2	gauge_spin_A	45,150,28,14	Spin
+myroom_2	gauge_impact_A	32,135,52,14	Accuracy
+myroom_2	gauge_control_A	32,120,46,14	Control
+myroom_2	gauge_power_A	32,105,40,14	Power
+myroom_2	title_C	32,84,77,20	My Room
+myroom_2	title_aztec_C	131,131,55,21	Aztecs
+myroom_2	title_Accessories_C	105,153,93,21	Accessories
+myroom_2	title_bongdari_C	129,175,57,21	Papels
+myroom_2	title_ring_C	131,109,46,21	Rings
+myroom_2	title_club_C	131,87,46,21	Clubs
+myroom_2	title_shoes_C	131,65,49,21	Shoes
+myroom_2	title_pants_C	131,43,67,21	Bottoms
+myroom_2	title_top_C	131,21,42,21	Tops
+n_loading	connecting_001_I	1,174,107,22	Connecting...
+n_loading	connecting_002_I	1,151,107,22	Connecting...
+network_lobby	title_random_C	241,377,61,18	Random
+network_lobby	title_back_C	241,358,37,18	Back
+network_lobby	title_front_C	241,339,37,18	Front
+network_lobby	title_18h_C	241,453,32,18	18-H
+network_lobby	title_9h_C	241,434,25,18	9-H
+network_lobby	title_6h_C	241,415,25,18	6-H
+network_lobby	title_3h_C	241,396,25,18	3-H
+network_lobby	title_sepiaw_C	232,320,80,18	Sepia Wind
+network_lobby	title_pinkw_C	232,301,69,18	Pink Wind
+network_lobby	title_whill_C	232,282,62,18	Wind Hill
+network_lobby	title_bmoon_C	232,263,75,18	Blue Moon
+network_lobby	title_blagoon_C	232,244,89,18	Blue Lagoon
+network_lobby	title_wizwiz_C	232,225,54,18	Wiz Wiz
+network_lobby	title_whitew_C	232,206,70,18	White Wiz
+network_lobby	title_westw_C	232,187,64,18	West Wiz
+network_lobby	title_deepin_C	232,168,91,18	Deep Inferno
+network_lobby	button_ready	65,118,95,24	Ready
+network_lobby	button_start	257,93,95,24	@34,2,46,20 Start
+network_lobby	button_ready_on	161,93,95,24	@31,2,56,20 Ready
+network_lobby	button_ready_off	65,93,95,24	@23,2,68,20 Get ready
+network_lobby	4p_red	308,118,20,15	4P
+network_lobby	4p_blue	287,118,20,15	4P
+network_lobby	3p_red	266,118,20,15	3P
+network_lobby	3p_blue	245,118,20,15	3P
+network_lobby	8p_red	476,118,20,15	8P
+network_lobby	8p_blue	455,118,20,15	8P
+network_lobby	7p_red	434,118,20,15	7P
+network_lobby	7p_blue	413,118,20,15	7P
+network_lobby	6p_red	392,118,20,15	6P
+network_lobby	6p_blue	371,118,20,15	6P
+network_lobby	5p_red	350,118,20,15	5P
+network_lobby	5p_blue	329,118,20,15	5P
+network_lobby	1p_red	182,118,20,15	1P
+network_lobby	1p_blue	161,118,20,15	1P
+network_lobby	2p_red	224,118,20,15	2P
+network_lobby	2p_blue	203,118,20,15	2P
+network_lobby	team_change_A	145,432,95,19	@22,3,72,13 Change Team
+network_roommake	off_text_front_C	245,316,41,20	Front
+network_roommake	off_text_back_C	245,295,41,20	Back
+network_roommake	off_text_random_C	245,274,63,20	Random
+network_roommake	off_text_3h_C	245,253,27,20	3-H
+network_roommake	off_text_6h_C	245,232,27,20	6-H
+network_roommake	off_text_9h_C	245,211,27,20	9-H
+network_roommake	off_text_18h_C	245,190,34,20	18-H
+network_roommake	off_text_deepin_C	245,169,93,20	Deep Inferno
+network_roommake	off_text_whitew_C	245,148,72,20	White Wiz
+network_roommake	off_text_westw_C	245,127,66,20	West Wiz
+network_roommake	off_text_wizwiz_C	245,106,56,20	Wiz Wiz
+network_roommake	off_text_pinkw_C	245,85,71,20	Pink Wind
+network_roommake	off_text_sepiaw_C	245,64,82,20	Sepia Wind
+network_roommake	off_text_whill_C	245,43,64,20	Wind Hill
+network_roommake	off_text_bmoon_C	245,22,77,20	Blue Moon
+network_roommake	on_text_front_C	119,316,41,20	Front
+network_roommake	on_text_back_C	119,295,41,20	Back
+network_roommake	on_text_random_C	119,274,63,20	Random
+network_roommake	on_text_3h_C	119,253,31,20	3-H
+network_roommake	on_text_6h_C	119,232,31,20	6-H
+network_roommake	on_text_9h_C	119,211,31,20	9-H
+network_roommake	on_text_18h_C	119,190,38,20	18-H
+network_roommake	title_C	372,18,109,20	Enter Room
+network_roommake	on_text_deepin_C	119,169,93,20	Deep Inferno
+network_roommake	on_text_whitew_C	119,148,72,20	White Wiz
+network_roommake	on_text_westw_C	119,127,66,20	West Wiz
+network_roommake	on_text_wizwiz_C	119,106,56,20	Wiz Wiz
+network_roommake	on_text_pinkw_C	119,85,71,20	Pink Wind
+network_roommake	on_text_sepiaw_C	119,64,82,20	Sepia Wind
+network_roommake	on_text_whill_C	119,43,64,20	Wind Hill
+network_roommake	on_text_bmoon_C	119,22,77,20	Blue Moon
+network_roommake	off_text_blagoon_C	245,1,91,20	Blue Lagoon
+network_roommake	off_icon_team	290,342,83,28	Team
+network_roommake	off_icon_single	374,342,83,28	Single
+network_roommake	on_icon_single	206,342,83,28	@31,5,49,18 Single
+network_roommake	on_icon_team	122,342,83,28	@36,5,44,18 Team
+network_roommake	on_text_blagoon_C	119,1,91,20	Blue Lagoon
+network_roommake	renew_A	374,39,95,19	Refresh
+nexthole	resultload	7,66,244,55	@36,18,134,22 Loading results...
+nexthole	holeload	7,1,244,64	@8,26,153,21 Moving to the next hole
+now_loading	n_dolani2_1	1,36,100,34	@12,10,56,17 Loading...
+now_loading	n_dolani2_2	1,1,100,34	@12,10,56,17 Loading...
+option	txt_title	341,142,56,20	Options
+option	icon_control_off_C	1,172,154,20	Controls
+option	icon_sound_off_C	1,88,154,20	Sound Settings
+option	icon_default_off_C	1,151,154,20	Default Settings
+option	icon_diffi_off_C	1,130,154,20	Beginner Mode
+option	icon_data_off_C	1,109,154,20	Data Maintenance
+option	icon_control_C	212,28,189,31	Controls
+option	icon_default_C	1,282,189,28	Default Settings
+option	icon_sound_C	1,194,189,30	Sound Settings
+option	icon_diffi_C	1,252,189,29	Beginner Mode
+option	icon_data_C	1,225,189,26	Data Maintenance
+option	title_default_C	191,299,114,20	Default Settings
+option	title_control_C	269,81,138,20	Controls
+option	title_diffi_C	310,299,110,20	Beginner Mode
+option	title_data_C	192,320,137,20	Data Maintenance
+option	title_sound_C	239,142,101,20	Sound Setting
+option	icon_default_control_C	1,341,172,31	Controls
+option	icon_default_default_C	1,373,172,28	Default Settings
+option	icon_default_sound_C	1,402,172,30	Sound Settings
+option	icon_default_diffi_C	1,311,172,29	Beginner Mode
+option	icon_default_data_C	239,1,172,26	Data Maintenance
+option	cmt_control_Z	156,163,154,30	View the controls|used in the game
+option	cmt_default_Z	311,163,111,30	Restore|default settings
+option	txt_sub_diffi_off_Z	245,126,109,14	Beginner Mode
+option	txt_sub_diffi_on	263,102,115,20	Beginner Mode
+option	txt_sub_sound_3_on_Z	156,122,87,19	Game BGM
+option	txt_sub_sound_2_on_Z	156,142,82,19	Menu BGM
+option	txt_sub_sound_1_on_Z	156,102,106,19	Sound Effects
+option	txt_sub_sound_3_off_Z	258,400,80,13	Game BGM
+option	txt_sub_sound_2_off_Z	339,400,76,13	Menu BGM
+option	txt_sub_sound_1_off_Z	249,414,100,13	Sound Effects
+option	txt_sub_default_on	360,443,48,20	Apply
+option	txt_sub_auto_on_A	330,320,80,20	Auto-Save
+option	txt_sub_delete_on_Z	174,60,52,19	Delete
+option	txt_sub_load_on_Z	360,464,42,19	Load
+option	txt_sub_save_on_Z	106,67,42,20	Save
+option	txt_auto_off_Z	379,102,26,13	OFF
+option	txt_auto_on_Z	398,194,23,13	ON
+option	txt_sub_auto_off_A	174,414,74,13	Auto-Save
+option	txt_sub_delete_off_Z	174,400,46,13	Delete
+option	txt_sub_load_off_Z	221,400,36,13	Load
+option	txt_sub_save_off_Z	350,414,36,13	Save
+option	txt_cancel_on_Z	204,80,64,21	Cancel
+option	txt_save_on_Z	156,80,47,21	OK
+option	txt_control_on	269,60,134,20	View Controls
+option	txt_save_off_Z	360,428,38,14	OK
+option	txt_cancel_off_Z	355,126,54,14	Cancel
+option	autosave_message	1,433,358,15	Do not remove the Memory Stick Duo™ or switch off
+option	autosave_message	15,450,70,16	the PSP®
+option	autosave_message	85,450,274,16	system when the Memory Stick Duo™
+option	autosave_message	1,468,358,15	access indicator is flashing.
+pangyashop_1	txt_shop_1_on_C	200,330,147,26	Costume Shop
+pangyashop_1	txt_shop_2_off_C	200,305,149,24	Equipment Shop
+pangyashop_1	txt_shop_1_off_C	200,280,133,24	Costume Shop
+pangyashop_1	txt_3_on_A	329,256,60,23	Shoes
+pangyashop_1	txt_2_on_A	360,357,82,23	Bottoms
+pangyashop_1	txt_5_on_A	385,384,56,23	Clubs
+pangyashop_1	txt_7_on_A	325,384,57,23	Rings
+pangyashop_1	txt_6_on_A	255,384,68,23	Aztecs
+pangyashop_1	txt_8_on_A	197,384,56,23	Items
+pangyashop_1	txt_shop_2_on_C	194,357,165,26	Equipment Shop
+pangyashop_1	txt_myroon_off_C	302,216,73,19	My Room
+pangyashop_1	txt_myroon_on_C	201,256,75,21	My Room
+pangyashop_1	txt_8_off_A	277,258,47,19	Items
+pangyashop_1	txt_5_off_A	296,236,48,19	Clubs
+pangyashop_1	txt_6_off_A	334,280,55,19	Aztecs
+pangyashop_1	txt_4_off_A	205,236,90,19	Accessories
+pangyashop_1	title_shop_C	200,215,100,20	Pangya Shop
+pangyashop_1	txt_2_off_A	349,336,69,19	Bottoms
+pangyashop_1	txt_1_on_A	316,191,50,24	Tops
+pangyashop_1	txt_4_on_A	206,191,109,23	Accessories
+pangyashop_1	txt_3_off_A	289,171,49,19	Shoes
+pangyashop_1	txt_7_off_A	242,171,44,19	Rings
+pangyashop_1	txt_1_off_A	200,171,41,19	Tops
+pangyashop_2	icon_new1	125,261,27,13	NEW
+pangyashop_2	icon_new2	153,261,27,13	NEW
+pangyashop_2	icon_newl_2	192,285,32,14	NEW
+pangyashop_2	icon_newl_1	192,270,32,14	NEW
+pangyashop_2	point_view	2,243,103,17	@15,0,88,17 View Points
+pangyashop_2	txt_btnbuy_off_C	154,221,27,14	Buy
+pangyashop_2	txt_btncancel_off_C	98,221,55,14	Cancel
+pangyashop_2	txt_btnbuy_on_C	64,221,33,20	Buy
+pangyashop_2	txt_category_1_C	275,199,43,21	Tops
+pangyashop_2	txt_category_2_C	205,199,66,21	Bottoms
+pangyashop_2	txt_category_3_C	152,199,51,21	Shoes
+pangyashop_2	txt_category_4_C	59,199,91,21	Accessories
+pangyashop_2	txt_mypang	2,221,60,21	My Pang
+pangyashop_2	txt_category_5_C	2,199,48,21	Clubs
+pangyashop_2	txt_category_8_C	128,279,46,21	Items
+pangyashop_2	txt_category_7_C	246,177,46,21	Rings
+pangyashop_2	txt_category_6_C	186,177,58,21	Aztecs
+pangyashop_2	txt_btncancel_on_C	124,177,61,20	Cancel
+pangyashop_2	char_name_Kooh_C	229,133,43,21	Kooh
+pangyashop_2	char_name_Titanboo_C	69,155,75,21	TitanBoo
+pangyashop_2	char_name_Cecilia_C	170,133,58,21	Cecilia
+pangyashop_2	char_name_Mingty_C	186,155,57,21	Mingty
+pangyashop_2	char_name_Max_C	86,177,37,21	Max
+pangyashop_2	char_name_Azer_C	2,177,83,21	Uncle Bob
+pangyashop_2	char_name_Darktitan_C	244,155,59,21	D.Titan
+pangyashop_2	char_name_Tiki_C	273,133,31,21	Tiki
+pangyashop_2	char_name_Cien_C	145,155,40,21	Cien
+pangyashop_2	char_name_Cadie_C	283,111,33,21	Brie
+pangyashop_2	char_name_Hana_C	122,133,47,21	Hana
+pangyashop_2	char_name_Quma_C	69,133,52,21	Quma
+pangyashop_2	char_name_Lolo_C	245,111,37,21	Lola
+pangyashop_2	char_name_Kaz_C	211,111,33,21	Kaz
+pangyashop_2	char_name_Keeper_C	150,111,60,21	Keeper
+pangyashop_2	char_name_Pipin_C	105,111,43,21	Pipin
+pangyashop_2	char_name_Arin_C	69,111,35,21	Arin
+pangyashop_2	char_name_Nuri_C	239,78,50,21	Scout
+pangyashop_2	txt_count_A	2,283,44,19	Count
+pangyashop_2	txt_mypang_2	219,221,63,14	My Pang
+pangyashop_2	txt_price	182,221,36,14	Price
+pangyashop_2	txt_title_costume_C	106,239,109,21	Costume Shop
+pangyashop_2	txt_title_outfits_C	2,261,122,21	Equipment Shop
+pangyashop_4	icon_sold_on	233,83,95,26	@10,3,76,20 Sold Out
+player_mark	r08	113,33,15,9	8P
+player_mark	r07	97,33,15,9	7P
+player_mark	r06	81,33,15,9	6P
+player_mark	r05	65,33,15,9	5P
+player_mark	r04	48,33,15,9	4P
+player_mark	r03	32,33,15,9	3P
+player_mark	r02	17,33,14,9	2P
+player_mark	b08	113,17,15,9	8P
+player_mark	b07	97,17,15,9	7P
+player_mark	b06	81,17,15,9	6P
+player_mark	b05	65,17,15,9	5P
+player_mark	b04	48,17,15,9	4P
+player_mark	b03	32,17,15,9	3P
+player_mark	b02	17,17,14,9	2P
+player_mark	w08	113,1,15,9	8P
+player_mark	w07	97,1,15,9	7P
+player_mark	w06	81,1,15,9	6P
+player_mark	w05	65,1,15,9	5P
+player_mark	w04	48,1,15,9	4P
+player_mark	w03	32,1,15,9	3P
+player_mark	w02	17,1,14,9	2P
+popup	yes_off	83,31,61,29	@15,8,30,14 Yes
+popup	no_off	83,1,61,29	@18,8,26,14 No
+popup	no_on	94,61,61,29	@15,5,32,18 No
+popup	yes_on	94,91,61,29	@12,5,37,18 Yes
+prologue_txt	txt_pangya_I	1,463,74,21	Pangya
+prologue_txt	txt_19_I	1,441,480,21	This was the beginning of
+prologue_txt	txt_18_I	1,419,480,21	participate in the Pangya Festival.
+prologue_txt	txt_17_I	1,397,480,21	of the unknown hero, to gather people to
+prologue_txt	txt_16_I	1,375,480,21	Every now and then, time fairies would fly to Earth, the home
+prologue_txt	txt_15_I	1,353,480,21	the unknown hero was created on Pangya Island in his honor.
+prologue_txt	txt_14_I	1,331,480,21	recover its life energy, and a game which imitated the feat of
+prologue_txt	txt_13_I	1,309,480,21	As a result of his heroic actions, Pangya Island was able to
+prologue_txt	txt_12_I	1,243,480,21	and Air Lance was an unknown hero who had come from Earth.
+prologue_txt	txt_11_I	1,221,480,21	The one who saved Pangya Island using the Aztec
+prologue_txt	txt_10_I	1,199,480,21	natural life energy was being drained, to plug the leak.
+prologue_txt	txt_9_I	1,177,480,21	Air Lance, a magical staff, into the hole through which the
+prologue_txt	txt_8_I	1,155,480,21	It was to hit the Aztec, a mysterious magic ball, with the
+prologue_txt	txt_7_I	1,133,480,21	Brie the Wise One presented a solution.
+prologue_txt	txt_6_I	1,111,480,21	Finally, amidst widespread concern,
+prologue_txt	txt_5_I	1,89,480,21	Robbed of its life energy, Pangya Island grew weaker everyday.
+prologue_txt	txt_4_I	1,67,480,21	dark sorcery to steal the life energy of Pangya Island.
+prologue_txt	txt_3_I	1,45,480,21	Those with much power and evil minds had begun using
+prologue_txt	txt_2_I	1,23,480,21	the peaceful Pangya Island was facing a great peril.
+prologue_txt	txt_1_I	1,1,480,21	A very long time ago, before there was such a thing as Pangya,
+prologue_txt	txt_skip_I	418,463,63,19	Next
+prologue_txt	txt_12_white_I	1,287,480,21	and Air Lance was an unknown hero who had come from Earth.
+prologue_txt	txt_11_white_I	1,265,480,21	The one who saved Pangya Island using the Aztec
+result	okdong_Z	1,129,49,20	OK
+result	title_appromissi_Z	203,45,144,20	Approach Mission
+result	title_holemissi_Z	1,108,145,20	Hole-in-one Mission
+result	title_scoremissi_Z	214,24,111,20	Score Mission
+result	title_teamtourm_Z	1,66,147,20	Team Tournament
+result	title_singleround_Z	1,87,93,20	Free Round
+result	title_chipmissi_Z	201,87,121,20	Chip-in Mission
+result	title_timeatt_Z	208,108,102,20	Time Attack
+result	title_tourm_Z	1,24,99,20	Tournament
+result	title_pangmissi_Z	1,45,105,20	Pang Mission
+result	title_match_Z	217,66,57,20	Match
+result	smallexp	169,150,26,13	EXP
+result_box	text_exp_Z	1,384,36,13	EXP
+result_box	text_pang_Z	1,367,36,16	Pang
+result_box	text_wl_Z	1,292,91,23	Win/Lose
+result_box	text_rank_Z	1,316,51,23	Rank
+result_box	chalcount_Z	1,268,89,23	Challenge
+result_box	text_score_Z	1,244,58,22	Score
+result_box	text_bigpang_Z	1,340,52,26	Pang
+result_font_01	foreagle	1,209,164,35	For EAGLE
+result_font_01	yourturn	1,173,164,35	Your Turn
+result_font_01	forbirdie	1,137,167,35	For BIRDIE
+result_font_01	forwin	1,101,132,35	For WIN
+result_font_01	approach	1,1,232,40	Approach Shot
+score_text	pang_gauge_info2_C	1,490,106,18	Mission complete
+score_text	pang_gauge_info_C	149,43,97,14	Pang remaining.
+score_text	title_scoreboard_C	1,330,99,19	Score Board
+score_text	title_match_C	1,250,106,19	Match Result
+score_text	title_mission_p_C	1,270,101,19	Pang Mission
+score_text	title_mission_s_C	1,350,108,19	Score Mission
+score_text	title_team_C	1,370,141,19	Team Tournament
+score_text	title_tournament_C	1,290,139,19	Tournament Rank
+score_text	title_approach_C	1,310,80,19	Approach
+score_text	map_info_whitewiz_C	1,74,64,15	White Wiz
+score_text	map_info_dinferno_C	1,58,83,15	Deep Inferno
+score_text	map_info_swind_C	1,186,72,15	Sepia Wind
+score_text	map_info_wizwiz_C	1,170,49,15	Wiz Wiz
+score_text	map_info_blagoon_C	1,106,80,15	Blue Lagoon
+score_text	map_info_pwind_C	1,90,64,15	Pink Wind
+score_text	map_info_bmoon_C	1,122,68,15	Blue Moon
+score_text	map_info_westwiz_C	1,154,59,15	West Wiz
+score_text	map_info_windhill_C	1,138,57,15	Wind Hill
+score_text	map_info_rhole_C	1,234,54,15	Random
+score_text	map_info_bhole_C	1,202,34,15	Back
+score_text	map_info_fhole_C	1,218,34,15	Front
+score_text	map_info_18hole_Z	143,365,34,15	18-H
+score_text	map_info_9hole_Z	143,349,24,15	9-H
+score_text	map_info_6hole_Z	143,333,24,15	6-H
+score_text	map_info_3hole_Z	143,317,24,15	3-H
+score_text	score_text_graph_Z	143,214,40,15	Graph
+score_text	score_text_nr_Z	143,406,34,14	Rank
+score_text	score_text_yard_Z	143,293,40,23	Distance|to Hole
+score_text	score_text_rg_Z	143,381,35,24	Ranking|Graph
+score_text	score_text_pang_Z	143,138,36,15	Pang
+score_text	score_text_name_Z	143,58,37,15	Name
+score_text	score_text_score_Z	143,277,38,15	Score
+score_text	score_text_shotno_Z	143,262,36,14	Shots
+score_text	score_text_condition_Z	143,230,56,15	Condition
+score_text	score_text_wdl1_Z	143,170,30,15	W/L
+score_text	score_text_wdl2_Z	143,106,31,15	Wins
+score_text	score_text_wdl3_Z	143,74,36,15	Score
+score_text	score_text_sum_Z	143,90,34,15	Total
+score_text	score_text_hole_Z	143,122,31,15	Hole
+score_text	score_text_par_Z	143,154,24,15	Par
+score_text	score_text_mypang_Z	143,246,36,15	Pang
+score_text	score_text_rank_Z	143,198,34,15	Rank
+score_text	botton_back	126,421,57,19	@15,0,42,19 Return
+score_text	botton_hole_back	1,390,78,19	@17,0,61,19 Last Hole
+score_text	botton_hole_front	1,410,78,19	@17,0,61,19 Next Hole
+score_text	info_cpu	129,11,22,9	CPU
+score_text	info_8p	113,11,15,9	8P
+score_text	info_7p	97,11,15,9	7P
+score_text	info_6p	81,11,15,9	6P
+score_text	info_5p	65,11,15,9	5P
+score_text	info_4p	49,11,15,9	4P
+score_text	info_3p	33,11,15,9	3P
+score_text	info_2p	17,11,15,9	2P
+score_text	info_1p	1,11,15,9	1P
+score_text	botton_next	1,450,47,19	@18,0,29,19 Next
+score_text	botton_out	1,470,41,19	Exit
+score_text	botton_cross1	1,430,86,19	Other Data
+score_text	score_bogey_C	214,128,41,13	BOGEY
+score_text	score_tbogey_C	206,156,49,13	T.BOGEY
+score_text	score_dbogey_C	204,142,51,13	D.BOGEY
+score_text	score_out_C	196,184,59,13	HOLE OUT
+score_text	score_give_C	208,170,47,13	GIVE UP
+score_text	score_birdie_C	216,114,39,13	BIRDIE
+score_text	score_par_C	228,100,27,13	PAR
+score_text	score_eagle_C	216,86,39,13	EAGLE
+score_text	score_albao_C	188,72,67,13	ALBATROSS
+score_text	score_hio_C	184,58,71,13	HOLE IN ONE
+score_text	score_text_team_Z	221,226,34,15	Team
+shop_512	pangyashop_title_C	280,118,112,21	Pangya Shop
+shop_512	icon_dress_off_C	252,191,75,35	Costume|Shop
+shop_512	icon_item_off_C	163,191,88,35	Equipment|Shop
+shop_512	icon_bong_off_C	108,189,54,36	Papel|Shop
+shop_512	icon_item_on_C	270,146,99,43	Equipment|Shop
+shop_512	icon_dress_on_C	108,146,96,21	Costume
+shop_512	icon_dress_on_C	108,167,96,21	Shop
+shop_512	icon_bong_on_C	205,146,64,44	Papel|Shop
+stamp	stamp_title_C	1,93,117,21	Purchase Points
+story_public	episode	1,97,89,16	Episode 1
+story_public	episode2	91,97,89,16	Episode 2
+story_public	title_C	183,97,86,20	Story Mode
+story_public_f	title_C	68,1,86,20	Story Mode
+story_public_f	episode3	68,22,79,16	Epilogue
+story_uv	name_?	276,168,69,38	???
+story_uv	name_Kaz	332,129,66,38	Kaz
+story_uv	name_Max	401,50,77,38	Max
+story_uv	name_Arin	261,129,70,38	Arin
+story_uv	name_Azer	256,11,173,38	Uncle Bob
+story_uv	name_Cien	179,129,80,38	Cien
+story_uv	name_Cecilia	341,89,117,38	Cecilia
+story_uv	name_Kooh	346,168,88,38	Kooh
+story_uv	name_Hana	244,89,96,39	Hana
+story_uv	name_Nuri	298,50,102,38	Scout
+story_uv	icon_new_2	121,140,27,12	NEW
+story_uv	icon_new	121,127,27,12	NEW
+story_uv	sub_3	185,34,49,21	Stats
+story_uv	sub_1	165,61,132,21	Story Progress
+story_uv	sub_2	185,12,49,21	Story
+story_uv	gauge_curve_A	166,114,38,14	Curve
+story_uv	gauge_power_A	399,143,41,14	Power
+story_uv	gauge_control_A	399,128,46,14	Control
+story_uv	gauge_spin_A	205,114,28,14	Spin
+story_uv	gauge_impact_A	389,207,63,14	Accuracy
+story_uv	change_A	167,93,69,15	Change
+story_uv_2	txt_match_Z	195,380,135,25	Match Mode
+story_uv_2	txt_tournament_Z	195,355,130,24	Tournament
+story_uv_2	txt_mission_Z	1,419,142,23	Score Mission
+story_uv_2	txt_event_Z	235,406,62,24	Event
+story_uv_2	txt_tutorial_Z	144,419,81,24	Tutorial
+story_uv_2	small_name_Max_C	91,381,51,16	Max
+story_uv_2	small_name_Cien_C	143,398,51,15	Cien
+story_uv_2	small_name_Kaz_C	143,381,51,16	Kaz
+story_uv_2	small_name_Arin_C	143,364,51,16	Arin
+story_uv_2	small_name_Hana_C	253,318,51,15	Hana
+story_uv_2	small_name_Kooh_C	91,398,51,15	Kooh
+story_uv_2	small_name_Azer_C	254,336,57,17	Uncle Bob
+story_uv_2	small_name_Nuri_C	91,364,51,15	Scout
+story_uv_2	small_name_Cecilia_C	305,318,51,15	Cecilia
+story_uv_2_f	txt_match_Z	195,179,70,25	Match
+story_uv_2_f	txt_mission_Z	283,179,63,24	Score
+story_uv_2_f	txt_tournament_Z	177,233,130,24	Tournament
+story_uv_2_f	txt_tutorial_Z	195,205,82,25	Tutorial
+story_uv_2_f	txt_event_Z	286,205,63,24	Event
+story_uv_2_f	small_name_Kaz_C	90,245,51,16	Kaz
+story_uv_f	sub_3	151,65,53,24	Stats
+story_uv_f	sub_1	147,40,85,24	Progress
+story_uv_f	sub_2	151,90,53,25	Story
+story_uv_f	gauge_curve_A	159,132,38,14	Curve
+story_uv_f	gauge_power_A	184,147,41,14	Power
+story_uv_f	gauge_control_A	151,116,46,14	Control
+story_uv_f	gauge_spin_A	130,132,28,14	Spin
+story_uv_f	gauge_impact_A	66,132,63,14	Accuracy
+story_uv_f	change_A	114,147,69,15	Change
+story_uv_f	name_Kaz	147,1,66,38	Kaz
+stroke_1	mode_on_C	109,301,49,21	Mode
+stroke_1	txt_front_on_C	109,235,43,21	Front
+stroke_1	single_on_C	109,323,51,21	Single
+stroke_1	team_on_C	109,345,48,21	Team
+stroke_1	txt_back_on_C	109,257,43,21	Back
+stroke_1	txt_shuffle_on_C	109,279,67,21	Random
+stroke_1	txt_sequence_on_C	1,366,80,21	Sequence
+stroke_1	txt_holes_on_C	1,256,49,21	Holes
+stroke_1	txt_18hole_on_C	1,344,40,21	18-H
+stroke_1	txt_9hole_on_C	1,322,34,21	9-H
+stroke_1	txt_6hole_on_C	1,300,34,21	6-H
+stroke_1	txt_3hole_on_C	1,278,34,21	3-H
+stroke_1	single_title_C	1,235,98,20	Free Round
+stroke_1	txt_18hole_off_C	224,301,39,21	18-H
+stroke_1	txt_9hole_off_C	224,279,31,21	9-H
+stroke_1	txt_6hole_off_C	224,257,31,21	6-H
+stroke_1	txt_3hole_off_C	224,235,31,21	3-H
+t_bluelagoon	bluelagoon_1_Z	1,1,151,25	Libera Challenge
+t_bluelagoon	bluelagoon_2_Z	1,27,196,25	Silvia Navy Invitational
+t_bluelagoon	bluelagoon_3_Z	1,53,171,25	Libera Beach Open
+t_bluelagoon	bluelagoon_4_Z	1,79,198,25	Wingtross Summer Open
+t_bluelagoon	bluelagoon_5_Z	1,105,176,25	Blue Lagoon Classic
+t_bluelagoon	bluelagoon_6_Z	1,131,143,25	Libera Clan Cup
+t_bluemoon	bluemoon_1_Z	1,1,195,25	Red Eye Memorial Game
+t_bluemoon	bluemoon_2_Z	1,27,171,40	Pirates Confederation|Invitational
+t_bluemoon	bluemoon_3_Z	1,68,171,25	Bartos Pirates Open
+t_bluemoon	bluemoon_4_Z	1,94,159,24	Blue Moon Classic
+t_bluemoon	bluemoon_5_Z	1,119,161,22	Luna Tomb Crown
+t_bluemoon	bluemoon_6_Z	1,142,195,25	Libera Best of the Best
+t_deepinferno	deepinferno_1_Z	1,1,169,25	Narakas Challenge
+t_deepinferno	deepinferno_2_Z	1,27,199,25	Black Dragon Memorial
+t_deepinferno	deepinferno_3_Z	1,53,194,25	Dark World Minion Cup
+t_deepinferno	deepinferno_4_Z	1,79,196,25	Dark World Warlord Cup
+t_deepinferno	deepinferno_5_Z	1,105,199,25	Dark World Legion Cup
+t_deepinferno	deepinferno_6_Z	1,131,127,25	Dark Lord Cup
+t_pinkwind	pinkwind_1_Z	1,1,171,25	Ventus Challenge
+t_pinkwind	pinkwind_2_Z	1,27,198,25	Cherry Blossom Game
+t_pinkwind	pinkwind_3_Z	1,53,138,25	Ventus ProAm
+t_pinkwind	pinkwind_4_Z	1,79,201,25	Wingtross Spring Open
+t_pinkwind	pinkwind_5_Z	1,105,198,24	Seed Alex Invitational
+t_pinkwind	pinkwind_6_Z	1,130,165,24	Pink Wind Classic
+t_sepiawind	sepiawind_1_Z	1,1,196,25	Titan Clan Bakery Cup
+t_sepiawind	sepiawind_2_Z	1,27,130,42	Gigayards|Anniversary Cup
+t_sepiawind	sepiawind_3_Z	1,70,198,25	Ventus Craftsman Cup
+t_sepiawind	sepiawind_4_Z	1,96,165,25	Sepia Wind Classic
+t_sepiawind	sepiawind_5_Z	1,122,134,25	Titan Clan Cup
+t_sepiawind	sepiawind_6_Z	1,148,198,26	Wingtross Championship
+t_westwiz	westwiz_1_Z	1,1,195,25	Maga Valley Challenge
+t_westwiz	westwiz_2_Z	1,27,190,42	10th Anniversary|of Independence Game
+t_westwiz	westwiz_3_Z	1,70,180,25	Coros Chronos Open
+t_westwiz	westwiz_4_Z	1,96,144,23	West Wiz Classic
+t_westwiz	westwiz_5_Z	1,120,173,25	Maga Valley Crown
+t_westwiz	westwiz_6_Z	1,146,116,42	Magic School|Championship
+t_whitewiz	whitewiz_1_Z	1,1,146,46	First Snow|Celebration Game
+t_whitewiz	whitewiz_2_Z	1,48,173,26	Maga Valley ProAm
+t_whitewiz	whitewiz_3_Z	1,75,150,46	Soren Muren Sisters|Invitational
+t_whitewiz	whitewiz_4_Z	1,122,150,23	White Wiz Classic
+t_whitewiz	whitewiz_5_Z	1,146,197,26	Wingtross Winter Open
+t_whitewiz	whitewiz_6_Z	1,173,120,49	Dual Company|Championship
+t_windhill	windhill_1_Z	1,1,198,23	Heroes Memorial Game
+t_windhill	windhill_2_Z	1,25,198,26	Wingtross Autumn Open
+t_windhill	windhill_3_Z	1,52,142,26	Wind Hill Classic
+t_windhill	windhill_4_Z	1,79,116,43	Justice Heart|Championship
+t_windhill	windhill_5_Z	1,123,192,26	Ventus Championship
+t_windhill	windhill_6_Z	1,150,116,43	Gigayards|Championship
+t_wizwiz	wizwiz_1_Z	1,1,177,24	Brie Memorial Game
+t_wizwiz	wizwiz_2_Z	1,26,163,25	Magic School Cup
+t_wizwiz	wizwiz_3_Z	1,52,191,25	Maga Wisemen Open
+t_wizwiz	wizwiz_4_Z	1,78,132,22	Wiz Wiz Classic
+t_wizwiz	wizwiz_5_Z	1,101,116,42	Maga Valley|Championship
+t_wizwiz	wizwiz_6_Z	1,144,138,22	Wiz Wiz Masters
+talk_box	char_name_libera	61,328,43,21	Luca
+talk_box	char_name_soren	1,350,48,21	Soren
+talk_box	char_name_seed	50,350,44,21	Seed
+talk_box	char_name_dragon	332,328,61,21	Dragon
+talk_box	char_name_muren	329,259,53,21	Muren
+talk_box	char_name_pirate	95,350,50,21	Pirate
+talk_box	char_name_titanboom	378,306,88,21	TitanBoom
+talk_box	char_name_titankhum	245,328,86,21	TitanKhum
+talk_box	char_name_titanbam	166,328,78,21	TitanBam
+talk_box	char_name_valeon	105,328,60,21	Valeon
+talk_box	char_name_panion	86,306,58,21	Panion
+talk_box	char_name_danlion	1,328,59,21	Danion
+talk_box	char_name_bongdal	401,284,49,21	Papel
+talk_box	char_name_minty	267,306,57,21	Mingty
+talk_box	char_name_tiki	197,306,31,21	Tiki
+talk_box	char_name_quma	145,306,51,21	Quma
+talk_box	char_name_lolo	134,284,37,21	Lola
+talk_box	char_name_pipin	42,306,43,21	Pipin
+talk_box	char_name_dolphini	325,306,52,21	Dolfini
+talk_box	char_name_titanboo	326,284,74,21	TitanBoo
+talk_box	char_name_cien	1,306,40,21	Cien
+talk_box	char_name_cadie	172,284,33,21	Brie
+talk_box	char_name_kaz	52,284,33,21	Kaz
+talk_box	char_name_arin	206,284,35,21	Arin
+talk_box	char_name_kooh	394,328,43,21	Kooh
+talk_box	char_name_cecilia	383,259,58,21	Cecilia
+talk_box	char_name_max	229,306,37,21	Max
+talk_box	char_name_azer	242,284,83,21	Uncle Bob
+talk_box	char_name_hana	86,284,47,21	Hana
+talk_box	char_name_nuri	1,284,50,21	Scout
+talk_box	char_name_kamen	129,259,58,21	Kamen
+talk_box	char_name_karen	188,259,49,21	Karen
+talk_box	char_name_titancham	238,259,90,21	TitanCham
+tip	tip_back_1	25,92,28,21	@3,2,21,10 TIP!
+title_logo	golf_I	222,74,91,35	GOLF
+title_logo	fantasy_I	222,1,91,48	FANTASY
+title_profile	text_newgame_on_C	319,80,96,21	New Game
+title_profile	text_continue_on_C	319,102,102,21	Load Game
+title_profile	text_newgame_off_C	323,168,90,15	New Game
+title_profile	text_continue_off_C	323,184,96,15	Load Game
+title_profile	text_confirm_on_C	323,124,29,21	OK
+title_profile	text_cancel_on_C	323,146,64,21	Cancel
+title_profile	text_confirm_off_C	323,200,22,15	OK
+title_profile	text_cancel_off_C	323,216,57,15	Cancel
+title_profile	text_profile_C	319,59,101,20	Create Profile
+top_etc	ground_bunker	1,37,50,16	Bunker
+top_etc	ground_sand	91,54,36,16	Sand
+top_etc	ground_ice	101,1,24,16	Ice
+top_etc	ground_water	1,54,45,16	Water
+top_etc	ground_ob	43,20,30,16	O.B.
+top_etc	ground_snow	1,20,41,16	Snow
+top_etc	ground_rough	1,1,44,18	Rough
+top_etc	ground_green	47,54,43,16	Green
+top_etc	ground_fairway	46,1,54,18	Fairway
+top_etc	ground_magma	75,20,50,17	Magma
+tournament	txt_deepinferno_Z	352,202,113,22	Deep Inferno
+tournament	txt_pinkwind_Z	352,177,85,20	Pink Wind
+tournament	txt_bluemoon_Z	350,128,92,20	Blue Moon
+tournament	txt_whitewiz_Z	351,153,86,20	White Wiz
+tournament	txt_westwiz_Z	350,103,79,20	West Wiz
+tournament	txt_wizwiz_Z	350,78,66,20	Wiz Wiz
+tournament	txt_windhill_Z	350,52,76,20	Wind Hill
+tournament	txt_sepiawind_Z	351,27,98,22	Sepia Wind
+tournament	txt_bluelagoon_Z	351,4,109,21	Blue Lagoon
+tournament	txt_master_Z	139,258,44,15	Master
+tournament	pang_box1	197,174,36,21	Prize
+tournament	captionl_q_C	113,435,186,25	You can't join the tournament.
+tournament	chalmode_text	351,226,93,20	Tournament
+tournament_cmt	cmt_deepinferno_Z	1,249,268,30	Have a go if you can hit the ball really far.|There are great prizes!
+tournament_cmt	cmt_windhill_Z	1,218,268,30	This course has difficult obstacles,|but promises a great deal of prize money.
+tournament_cmt	cmt_westwiz_Z	1,187,268,30	There are many cliffs|but the ground type is not too difficult.
+tournament_cmt	cmt_wizwiz_Z	1,156,268,30	There is a large amount of prize money|if you can overcome the difficult ground type.
+tournament_cmt	cmt_bluemoon_Z	1,125,268,30	There are many coconut trees in the way|but there are special prize up for grabs.
+tournament_cmt	cmt_whitewiz_Z	1,94,268,30	Use the slippery ice surface|to your advantage.
+tournament_cmt	cmt_pinkwind_Z	1,63,268,30	This is a simple green where|the victory may easily be yours.
+tournament_cmt	cmt_sepiawind_Z	1,32,268,30	Watch out for the trees|and windmills!
+tournament_cmt	cmt_bluelagoon_Z	1,1,268,30	The prize money is not much|but aim for victory!
+tournament_lv1	icon_lv1	76,1,58,43	@9,10,42,23 Lv.1
+tournament_lv2	icon_lv2	76,1,58,43	@9,10,42,23 Lv.2
+tournament_lv3	icon_lv3	76,1,58,43	@9,10,42,23 Lv.3
+tournament_lv4	icon_lv4	76,1,58,43	@9,10,42,23 Lv.4
+tournament_lv5	icon_lv5	76,1,58,43	@9,10,42,23 Lv.5
+tournament_lv6	icon_lv6	76,1,58,43	@9,10,42,23 Lv.6
+tutorial_popup	list_text_7_C	39,261,76,13	End Tutorial
+tutorial_popup	list_text_6_C	91,247,50,13	Scoring
+tutorial_popup	list_text_5_C	1,233,80,13	Green Slopes
+tutorial_popup	list_text_4_C	169,233,37,13	Items
+tutorial_popup	list_text_3_C	82,233,86,13	Ground Types
+tutorial_popup	list_text_2_C	1,247,89,13	Power Gauge
+tutorial_popup	list_text_1_C	1,261,37,13	Clubs
+tutorial_popup	txt_small_tutorial	1,101,94,25	Tutorial
+tutorial_popup	move_3	117,267,63,19	Move
+tutorial_popup	select	181,267,41,19	OK
+tutorial_popup	back	147,247,57,19	Back
+tutorial_popup	help_text	1,287,162,12	Please make a selection.
+tutorial_sub_title	tutotitle_01	1,1,102,22	@21,3,78,16 Clubs
+tutorial_sub_title	tutotitle_02	1,24,102,22	@21,3,78,16 Power Gauge
+tutorial_sub_title	tutotitle_03	1,47,102,22	@21,3,78,16 Ground Types
+tutorial_sub_title	tutotitle_04	1,70,102,22	@21,3,78,16 Items
+tutorial_sub_title	tutotitle_05	1,93,102,22	@21,3,78,16 Green Slopes
+tutorial_sub_title	tutotitle_06	1,116,102,22	@21,3,78,16 Scoring
+tutorial_sub_title	tutotitle_07	1,139,102,22	@21,3,78,16 Backspin
+tutorial_sub_title	tutotitle_08	1,162,102,22	@21,3,78,16 Topspin
+tutorial_sub_title	tutotitle_09	1,185,102,22	@21,3,78,16 Tomahawk
+tutorial_sub_title	tutotitle_10	1,208,102,22	@21,3,78,16 Power Curve
+tutorial_sub_title	tutotitle_11	1,231,102,22	@21,3,78,16 Cobra
+tutorial_sub_title	tutotitle_12	1,254,102,22	@21,3,78,16 Spike
+tutorial_sub_title	icon_exit	1,277,76,16	Exit
+tutorial_sub_title_tip	tip_12_Z	57,210,154,18	Practice the Spike Shot.
+tutorial_sub_title_tip	tip_11_Z	54,191,158,18	Practice the Cobra Shot.
+tutorial_sub_title_tip	tip_10_Z	53,172,167,18	Practice the Power Curve.
+tutorial_sub_title_tip	tip_09_Z	57,153,188,18	Practice the Tomahawk Shot.
+tutorial_sub_title_tip	tip_08_Z	61,134,143,18	Practice the Topspin.
+tutorial_sub_title_tip	tip_07_Z	61,115,149,18	Practice the Backspin.
+tutorial_text_chapter_01	chapter_text_Z	0,284,256,41	Don't be silly!|You only learned how to change clubs!|This is just the beginning!
+tutorial_text_chapter_01	chapter_text_Z	0,256,256,27	Hehe...|Am I a Pangya Master now?
+tutorial_text_chapter_01	chapter_text_Z	0,228,256,27	Well done.|That's how you do it.
+tutorial_text_chapter_01	chapter_text_Z	0,185,256,42	Now, can you choose a club to get the|distance you want? Choose a club|to aim the ball at the yellow mark.
+tutorial_text_chapter_01	chapter_text_Z	0,1,256,57	Ok. Let's try out|the 14 clubs you have.|Use these clubs to hit the ball|where you want it to go.
+tutorial_text_chapter_02	chapter_text_Z	0,403,256,12	Good. Now let's move on to the next part.
+tutorial_text_chapter_02	chapter_text_Z	0,360,256,42	Hehe...|That's what they all say|when they first play Pangya...
+tutorial_text_chapter_02	chapter_text_Z	0,333,256,26	This is exactly the same as a|game we play on Earth called golf.
+tutorial_text_chapter_02	chapter_text_Z	0,306,256,26	Hey... Not bad.|That's how you do it.
+tutorial_text_chapter_02	chapter_text_Z	0,278,256,27	Do you want to try?|Hit the ball to the target area.
+tutorial_text_chapter_02	chapter_text_Z	0,235,256,42	A Pangya Shot ensures that|your shot lands where you want it to,|so always aim for a Pangya Shot!
+tutorial_text_chapter_02	chapter_text_Z	0,192,256,42	If you get it dead on exactly|at the white line, just like before,|you will get a Pangya Shot.
+tutorial_text_chapter_02	chapter_text_Z	0,29,256,41	Ta Da! This is the Power Gauge.|It lets you hit the ball.
+tutorial_text_chapter_02	chapter_text_Z	0,1,256,27	Now that we know the characteristics|of each club, let's learn how to hit the ball.
+tutorial_text_chapter_03	chapter_text_Z	0,287,256,42	Hmm...|I like your attitude.|Now, let's move on to the next part.
+tutorial_text_chapter_03	chapter_text_Z	0,259,256,27	No worries.|I still want to be a Pangya Master.
+tutorial_text_chapter_03	chapter_text_Z	0,217,256,41	Hey! You're just a beginner.|You have much more to learn|to be a Pangya Master!
+tutorial_text_chapter_03	chapter_text_Z	0,190,256,26	I see...Becoming a Pangya Master|doesn't seem easy...
+tutorial_text_chapter_03	chapter_text_Z	0,162,256,27	You should hit the ball harder because|the ball is in the sand in the bunker.
+tutorial_text_chapter_03	chapter_text_Z	0,134,256,27	Whoa... That bunker sure|does kill the flying distance.
+tutorial_text_chapter_03	chapter_text_Z	0,29,256,52	The area shown in sky blue represents|the area of the ball buried in the bunker.|The deeper it's buried, the shorter|the flying distance becomes.
+tutorial_text_chapter_03	chapter_text_Z	0,1,256,27	Now let's learn what we should do|when the ball gets in the bunker.
+tutorial_text_chapter_04	chapter_text_Z	0,240,256,26	Relax...|I'll show you how it's done.
+tutorial_text_chapter_04	chapter_text_Z	0,202,256,37	The green? I don't know...|I was never confident on the green|even back home on Earth.
+tutorial_text_chapter_04	chapter_text_Z	0,159,256,42	Great! This Papel is yours now.|Shall we move out onto the green now|that you have a Papel and all?
+tutorial_text_chapter_04	chapter_text_Z	0,146,256,12	Now, let's try using an item.
+tutorial_text_chapter_04	chapter_text_Z	0,57,256,42	You can use the items in|this Papel during the game.|Shall we try one?
+tutorial_text_chapter_04	chapter_text_Z	0,14,256,42	Meet Papel, the wonder of Pangya Island.|It's a living shopping bag you get from a|store called the 'Pangya Shop' in Ventus.
+tutorial_text_chapter_04	chapter_text_Z	0,1,256,12	Now I'll teach you how to use items.
+tutorial_text_chapter_05	chapter_text_Z	0,497,256,12	Ok, let's move onto the last part then.
+tutorial_text_chapter_05	chapter_text_Z	0,456,256,12	Hey, that's pretty good.
+tutorial_text_chapter_05	chapter_text_Z	0,430,256,25	Now...Think about the slope and|hit the ball in the hole.
+tutorial_text_chapter_05	chapter_text_Z	0,386,256,43	The position of the dots tells you the direction|of the slope on the green.|The ball will roll toward that direction, too.|Dots leaning toward the left indicate a left lie.
+tutorial_text_chapter_05	chapter_text_Z	0,1,256,34	On the green, you have to roll the ball|into the hole. This is called putting.|I'll show you how to do it.
+tutorial_text_chapter_06	chapter_text_Z	0,293,256,42	You missed it.That's ok,|it was your first time.|Don't worry, let's try again.
+tutorial_text_chapter_06	chapter_text_Z	0,265,256,27	Use what you've learned so far and|hit the ball in less than 4 shots.
+tutorial_text_chapter_06	chapter_text_Z	0,226,256,38	Use the Pang to buy items and costumes.|It's also used to decide|the winner in the event of a tie game.
+tutorial_text_chapter_06	chapter_text_Z	0,213,256,12	You will receive some Pang if you play well.
+tutorial_text_chapter_06	chapter_text_Z	0,127,256,27	This is a Pangya Combo Gauge which fills|up every time an accurate shot is taken.
+tutorial_text_chapter_06	chapter_text_Z	0,71,256,12	Par 4 means that you get 4 shots to get the ball in.
+tutorial_text_chapter_06	chapter_text_Z	0,43,256,27	Oh, I almost forgot. I'll teach you how|the score is calculated for each hole.
+tutorial_text_chapter_06	chapter_text_Z	0,1,256,41	I have taught you everything I know.|Let's apply what you've learned|so far and play a hole.
+tutorial_text_chapter_07	chapter_text_Z	0,338,256,41	I did it!|It's so cool how the ball rolls back!|This could come in handy...
+tutorial_text_chapter_07	chapter_text_Z	0,295,256,42	That was close.|The control was correct but you have to|get the ball in the target. Try again.
+tutorial_text_chapter_07	chapter_text_Z	0,202,256,42	Do you want to try it?|Don't forget to lower the|Hit Point with the analog stick.
+tutorial_text_chapter_07	chapter_text_Z	0,189,256,12	Shall we try it?
+tutorial_text_chapter_07	chapter_text_Z	0,56,256,57	The small blue circle within the red|circle is the Hit Point that will give you|the spin. Use the analog stick to lower|it to the point you want...
+tutorial_text_chapter_07	chapter_text_Z	0,29,256,26	Hit Point?|This is starting to get tricky...
+tutorial_text_chapter_07	chapter_text_Z	0,1,256,27	To give your ball Backspin, you need to|know how to use the Hit Point.
+tutorial_text_chapter_08	chapter_text_Z	0,298,256,27	Muhaha!|Now I have more distance!
+tutorial_text_chapter_08	chapter_text_Z	0,255,256,42	Aww, that was so close. Even if you|get the control right, you still have|to get the Aztec in the target area.
+tutorial_text_chapter_08	chapter_text_Z	0,176,256,27	You want to have a shot?|Don't forget to adjust the Hit Point.
+tutorial_text_chapter_08	chapter_text_Z	0,163,256,12	Let's practise.
+tutorial_text_chapter_08	chapter_text_Z	0,28,256,27	If you want to hit with Topspin, you|have to know how to use the Hit Point.
+tutorial_text_chapter_08	chapter_text_Z	0,1,256,26	Now... What was that Topspin|you were talking about?
+tutorial_text_chapter_09	chapter_text_Z	0,456,256,52	You can still hit a Tomahawk Shot without|hitting a Pangya Shot, but if you do hit|a Pangya Shot, your Tomahawk Shot|will be more precise.
+tutorial_text_chapter_09	chapter_text_Z	0,428,256,27	So this is the Tomahawk Shot.|It looks very useful.
+tutorial_text_chapter_09	chapter_text_Z	0,388,256,39	If the Aztec doesn't reach|the target area, it's a no-go even if you|get the control right. Try again.
+tutorial_text_chapter_09	chapter_text_Z	0,259,256,42	Ahahaha, what confidence.|Well, let's go through the Tomahawk Shot|step by step.
+tutorial_text_chapter_09	chapter_text_Z	0,216,256,42	It doesn't look easy|but I, Cecilia,|can handle it.
+tutorial_text_chapter_09	chapter_text_Z	0,100,256,11	Ok, then... Let's start.
+tutorial_text_chapter_09	chapter_text_Z	0,72,256,27	Kooh's probably getting stronger as|we speak. I have no time.
+tutorial_text_chapter_09	chapter_text_Z	0,29,256,42	Patience, miss. The Tomahawk Shot is|a difficult technique and|has to be learned carefully.
+tutorial_text_chapter_09	chapter_text_Z	0,1,256,27	C'mon, TitanBoo,|there's no time.Let's start now.
+tutorial_text_chapter_10	chapter_text_Z	0,375,256,42	What a curve! So this is the Power Curve!|Should come in handy when taking|a shot around obstacles.
+tutorial_text_chapter_10	chapter_text_Z	0,332,256,42	Hmm... The control was correct|but the Aztec didn't reach the target area|so it's a no-go... Let me try it again.
+tutorial_text_chapter_10	chapter_text_Z	0,277,256,11	Ruffle... Shuffle...
+tutorial_text_chapter_10	chapter_text_Z	0,264,256,12	Ok, let's do this.
+tutorial_text_chapter_10	chapter_text_Z	0,172,256,42	Oh, I remember. I move this Hit Point to|the left or right as far as it goes to bend|the shot in the direction of my choice...
+tutorial_text_chapter_10	chapter_text_Z	0,130,256,41	Ruffle... Shuffle...Ruffle... Shuffle...|Ruffle... Shuffle...Ruffle... Shuffle...
+tutorial_text_chapter_10	chapter_text_Z	0,102,256,27	It's not working.|Teach me the control again.
+tutorial_text_chapter_10	chapter_text_Z	0,56,256,42	Hmm... I see...|So that's how you do it, huh?|Let me try it.
+tutorial_text_chapter_10	chapter_text_Z	0,29,256,26	Ruffle... shuffle...|Ruffle... Shuffle...
+tutorial_text_chapter_10	chapter_text_Z	0,1,256,27	Power Curve, huh?|Ok, what's this all about?
+tutorial_text_chapter_11	chapter_text_Z	0,373,256,59	You can still take a Cobra Shot|without hitting a Pangya Shot,|but your Cobra Shot will be much more|precise if you do hit a Pangya Shot.
+tutorial_text_chapter_11	chapter_text_Z	0,346,256,26	Aha! I did it!|See?  I'm not just a brawny pirate!
+tutorial_text_chapter_11	chapter_text_Z	0,303,256,42	Even if you get the shot right, you|have to get the ball in the target area.|Try again!
+tutorial_text_chapter_11	chapter_text_Z	0,190,256,26	Ok! Let's take a look at|what a Cobra Shot looks like then.
+tutorial_text_chapter_11	chapter_text_Z	0,163,256,26	N-Nothing!|Hurry up and start!
+tutorial_text_chapter_11	chapter_text_Z	0,136,256,26	It's really easy.|What's wrong?
+tutorial_text_chapter_11	chapter_text_Z	0,123,256,12	( Whoa... It's so complicated! )
+tutorial_text_chapter_11	chapter_text_Z	0,41,256,27	You can only hit a Cobra Shot|in the Power Shot mode.
+tutorial_text_chapter_11	chapter_text_Z	0,29,256,11	Yeah, you bet.
+tutorial_text_chapter_11	chapter_text_Z	0,1,256,27	I'll show them!|I'm more than just a dumb pirate!
+tutorial_text_chapter_12	chapter_text_Z	0,426,256,55	Y-You can still hit a Spike Shot|even if you don't hit a Pangya Shot,|but the Spike shot will be|m-more precise if you hit a Pangya Shot.
+tutorial_text_chapter_12	chapter_text_Z	0,397,256,28	Yeah! I did it!|Now I'm one step closer to Max!
+tutorial_text_chapter_12	chapter_text_Z	0,355,256,41	Whoa... That was close!|You got the control right but you have to|get the ball in the target area.
+tutorial_text_chapter_12	chapter_text_Z	0,283,256,28	N-Now... it's time for you to take a shot.|You can do it, right?
+tutorial_text_chapter_12	chapter_text_Z	0,255,256,27	Sure you can! Well then, t-take a|look at what a Spike Shot looks like.
+tutorial_text_chapter_12	chapter_text_Z	0,213,256,41	I see...|It looks kind of tricky|but I think I can do it!
+tutorial_text_chapter_12	chapter_text_Z	0,127,256,27	F-First of all, the Spike Shot is only|p-possible in Power Shot mode.
+tutorial_text_chapter_12	chapter_text_Z	0,71,256,12	Yeah! I'm going to do it!
+tutorial_text_chapter_12	chapter_text_Z	0,28,256,42	O-Of course!|Y-You have to learn it to have a better|chance of beating Max!
+tutorial_text_chapter_12	chapter_text_Z	0,1,256,26	Can I really learn the Spike Shot...?
+tutorial_tool_tip_01	tooltip_10	1,463,123,43	Hit the ball 15%|stronger than usual.
+ui_btn	smallbox_5_I	189,109,135,26	@8,4,119,18 Trophies
+ui_btn	smallbox_4_I	189,82,135,26	@8,4,119,18 Recorded Ranks
+ui_btn	smallbox_3_I	189,55,135,26	@8,4,119,18 Character Records
+ui_btn	smallbox_2_I	189,28,135,26	@8,4,119,18 Play Records
+ui_btn	smallbox_1_I	189,1,135,26	@8,4,119,18 Basic Data
+ui_btn	bigbox_5_I	1,97,187,23	Trophies
+ui_btn	bigbox_4_I	1,73,187,23	Recorded Ranks
+ui_btn	bigbox_3_I	1,49,187,23	Character Records
+ui_btn	bigbox_2_I	1,25,187,23	Play Records
+ui_btn	bigbox_1_I	1,1,187,23	Basic Data
+ui_ch_map	port_Nuri	1,1,107,35	Scout
+ui_ch_map	port_Hana	1,37,107,35	Hana
+ui_ch_map	port_Azer	1,253,107,35	@50,0,57,35 Uncle|Bob
+ui_ch_map	port_Cecilia	1,109,107,35	Cecilia
+ui_ch_map	port_Max	109,181,107,35	Max
+ui_ch_map	port_Kooh	109,253,107,35	Kooh
+ui_ch_map	port_Arin	1,181,107,35	Arin
+ui_ch_map	port_Kaz	1,289,107,35	Kaz
+ui_ch_map	port_Cien	109,73,107,35	Cien
+ui_ch_map	port_Pipin	1,73,107,35	Pipin
+ui_ch_map	port_Titanboo	109,145,107,35	@50,0,57,35 Titan|Boo
+ui_ch_map	port_Lolo	109,217,107,35	Lola
+ui_ch_map	port_Quma	1,145,107,35	Quma
+ui_ch_map	port_Tiki	109,289,107,35	Tiki
+ui_ch_map	port_Cadie	109,37,107,35	Brie
+ui_ch_map	port_Mingty	1,217,107,35	Mingty
+ui_ch_map	port_Darktitan	109,1,107,35	D.Titan
+ui_ch_map	port_Keeper	109,109,107,35	Keeper
+ui_ch_map	logo_bluelagoon	217,1,115,37	@56,0,59,37 Blue|Lagoon
+ui_ch_map	logo_sepiawind	217,115,125,37	@57,0,68,37 Sepia|Wind
+ui_ch_map	logo_windhill	217,229,115,37	WindHill
+ui_ch_map	logo_wizwiz	217,39,115,37	WizWiz
+ui_ch_map	logo_westwiz	217,153,125,37	WestWiz
+ui_ch_map	logo_bluemoon	217,267,125,37	@57,0,68,37 Blue|Moon
+ui_ch_map	logo_whitewiz	217,77,125,37	WhiteWiz
+ui_ch_map	logo_pinkwind	217,191,125,37	PinkWind
+ui_ch_map	logo_deepinferno	217,305,125,37	@57,0,68,37 Deep|Inferno
+ui_ch_map	port_who	1,325,107,35	???
+ui_graph	today_time	19,172,155,21	Today's Playing Time
+ui_graph	today_pang	19,194,170,21	Today's Acquired Pang
+ui_graph	icon_today_A	249,1,48,24	@3,4,37,16 Today
+ui_menu	text_storymode_C	1,434,86,21	Story Mode
+ui_menu	text_singlemode_C	199,450,141,21	Pangya Tour Mode
+ui_menu	text_networkmode_C	145,428,109,21	Network Mode
+ui_menu	text_collection_C	123,406,136,21	Pangya Collection
+ui_menu	text_option_C	143,450,55,21	Options
+ui_menu	text_episode1_off_C	311,83,77,19	Episode 1
+ui_menu	text_episode2_off_C	304,161,78,19	Episode 2
+ui_menu	text_episodef_off_C	304,181,70,19	Epilogue
+ui_menu	text_tournament_off_C	123,265,90,19	Free Round
+ui_menu	text_singleround_off_C	197,285,62,19	License
+ui_menu	text_license_off_C	122,306,97,19	Tournament
+ui_menu	text_tutorial_off_C	214,265,61,19	Tutorial
+ui_menu	text_makeroom_off_C	132,326,105,19	Create Room
+ui_menu	text_enterroom_off_C	132,346,92,19	Enter Room
+ui_menu	text_shop_off_C	132,366,106,19	Pangya Shop
+ui_menu	text_myroom_off_C	123,386,74,19	My Room
+ui_menu	text_record_off_C	198,386,66,19	Records
+ui_menu	text_gallery_off_C	220,306,58,19	Gallery
+ui_menu	text_episode1_on_C	219,83,91,25	Episode 1
+ui_menu	text_episode2_on_C	219,109,91,25	Episode 2
+ui_menu	text_episodef_on_C	134,172,83,25	Epilogue
+ui_menu	text_tournament_on_C	283,376,106,25	Free Round
+ui_menu	text_singleround_on_C	164,53,74,25	License
+ui_menu	text_license_on_C	123,239,114,25	Tournament
+ui_menu	text_tutorial_on_C	316,324,73,25	Tutorial
+ui_menu	text_makeroom_on_C	251,135,123,25	Create Room
+ui_menu	text_enterroom_on_C	238,239,106,25	Enter Room
+ui_menu	text_shop_on_C	265,350,124,25	Pangya Shop
+ui_menu	text_myroom_on_C	302,298,87,25	My Room
+ui_menu	text_record_on_C	311,402,78,25	Records
+ui_menu	text_gallery_on_C	311,103,69,25	Gallery
+ui_menu	text_storymode_off_C	134,139,48,32	Story|Mode
+ui_menu	text_singlemode_off_C	281,265,108,32	Pangya Tour|Mode
+ui_menu	text_networkmode_off_C	184,139,66,32	Network|Mode
+ui_menu	text_collection_off_C	304,201,80,32	Pangya|Collection
+ui_menu	text_storymode_on_C	218,198,61,40	Story|Mode
+ui_menu	text_singlemode_on_C	256,1,124,40	Pangya Tour|Mode
+ui_menu	text_networkmode_on_C	134,198,83,40	Network|Mode
+ui_menu	text_collection_on_C	256,42,100,40	Pangya|Collection
+ui_menu	text_option_off_C	89,434,52,16	Options
+ui_menu	text_option_on_C	250,326,63,21	Options
+ui_menu	text_prologue_off_C	123,285,73,19	Prologue
+ui_menu	text_prologue_on_C	218,172,85,25	Prologue
+ui_menu	text_episode2_no_off_C	139,99,78,19	Episode 2
+ui_menu	text_episodef_no_off_C	139,119,71,19	Epilogue
+ui_menu	text_episode2_no_on_C	164,27,91,25	Episode 2
+ui_menu	text_episodef_no_on_C	81,41,82,25	Epilogue
+ui_menu	text_episode1_no_off_C	139,79,78,19	Episode 1
+ui_menu	text_episode1_no_on_C	139,1,91,25	Episode 1
+ui_record	dong_detail	306,2,69,21	Detail
+ui_record	text_chara_Z	304,250,58,12	Character
+ui_record	text_coscompl_Z	304,263,49,12	Costume
+ui_record	text_totalhole_Z	304,276,50,12	Play Hole
+ui_record	text_totalpang_Z	303,290,86,15	Acquired Pang
+ui_record	text_gainpang_Z	304,352,86,15	Acquired Pang
+ui_record	text_avershot_Z	343,307,32,20	Avg.|Score
+ui_record	text_course_Z	303,322,38,12	Course
+ui_record	text_score_Z	304,335,31,12	Score
+ui_record	text_flyyard_Z	343,329,30,21	Best|Drive
+ui_record	text_chipyard_Z	306,368,36,24	Best|Chip-In
+ui_record	text_100per	134,71,40,18	100%
+ui_record	txt_title	304,227,59,20	Records
+wait_cpuplay	wait_cpu	1,1,103,37	Wait!
+wait_cpuplay	wait_cpu	1,38,103,17	CPU PLAY
+02_mapname_bluelagoon	hole	1,83,45,21	Hole
+02_mapname_bluelagoon	par	47,83,37,21	Par
+03_mapname_sepiawind	hole	1,83,45,21	Hole
+03_mapname_sepiawind	par	47,83,37,21	Par
+04_mapname_windhill	hole	1,83,45,21	Hole
+04_mapname_windhill	par	47,83,37,21	Par
+05_mapname_wizwiz	hole	1,83,45,21	Hole
+05_mapname_wizwiz	par	47,83,37,21	Par
+06_mapname_westwiz	hole	1,83,45,21	Hole
+06_mapname_westwiz	par	47,83,37,21	Par
+07_mapname_bluemoon	hole	1,83,45,21	Hole
+07_mapname_bluemoon	par	47,83,37,21	Par
+08_mapname_whitewiz	hole	1,83,45,21	Hole
+08_mapname_whitewiz	par	47,83,37,21	Par
+09_mapname_pinkwind	hole	1,83,45,21	Hole
+09_mapname_pinkwind	par	47,83,37,21	Par
+10_mapname_deepinferno	hole	1,83,45,21	Hole
+10_mapname_deepinferno	par	47,83,37,21	Par
+option	cmt_diffi_2_Z	174,342,237,57	@6,0,229,28 Game difficulty will be reduced|if Beginner Mode is ON.
+option	cmt_diffi_2_Z	174,342,237,57	@10,42,227,15 Not applicable to Network Mode
+option	cmt_diffi_1	191,194,206,104	@15,4,180,17 Larger hole cup used.
+option	cmt_diffi_1	191,194,206,104	@15,21,180,16 Minimizes wind severity.
+option	cmt_diffi_1	191,194,206,104	@15,37,180,28 Impact zone of Power|Gauge expanded.
+option	cmt_diffi_1	191,194,206,104	@15,65,180,31 Pangya Combo Gauge|increased.
+license	board	1,1,220,216	@36,44,40,16 Level
+license	board	1,1,220,216	@36,70,34,16 Hole
+tutorial_tool_tip_01	tooltip_01	1,261,61,56	@5,25,51,28 Select|Club
+tutorial_tool_tip_01	tooltip_02	1,147,61,56	@2,21,57,31 Overhead|View
+tutorial_tool_tip_01	tooltip_03	1,204,61,56	@6,35,49,17 Move
+tutorial_tool_tip_01	tooltip_04	64,204,61,56	@6,21,49,32 Zoom|in/out
+tutorial_tool_tip_01	tooltip_05	64,147,61,56	@8,21,45,32 Item|Slot
+tutorial_tool_tip_01	tooltip_06	64,318,61,56	@6,22,49,31 Select|Item
+tutorial_tool_tip_01	tooltip_07	64,261,61,56	@6,23,49,30 Veiw|Score
+tutorial_tool_tip_01	tooltip_08	1,74,123,72	@2,5,78,17 Change Club
+tutorial_tool_tip_01	tooltip_08	1,74,123,72	@2,26,89,16 Overhead View
+tutorial_tool_tip_01	tooltip_08	1,74,123,72	@18,45,40,17 Zoom
+tutorial_tool_tip_01	tooltip_09	1,419,123,43	@8,5,79,31 Start Power|Gauge
+tutorial_tool_tip_01	tooltip_11	1,375,123,43	@10,5,64,32 Open|Item Slot
+tutorial_tool_tip_01	tooltip_12	1,1,123,72	@6,49,27,16 Flat
+tutorial_tool_tip_01	tooltip_12	1,1,123,72	@39,30,40,27 Left|Slope
+tutorial_tool_tip_01	tooltip_12	1,1,123,72	@81,49,38,17 Uphill
+tutorial_tool_tip_02	tooltip_13	1,1,141,107	@5,33,90,15 Hit Point location :
+tutorial_tool_tip_02	tooltip_13	1,1,141,107	@19,53,29,13 Press
+tutorial_tool_tip_02	tooltip_13	1,1,141,107	@74,53,45,14 after the
+tutorial_tool_tip_02	tooltip_13	1,1,141,107	@9,68,124,34 Power Gauge passes the|halfway mark on|its way back
+tutorial_tool_tip_02	tooltip_14	1,109,141,107	@5,33,90,13 Hit Point location :
+tutorial_tool_tip_02	tooltip_14	1,109,141,107	@7,53,27,13 Press
+tutorial_tool_tip_02	tooltip_14	1,109,141,107	@62,53,72,13 once after the
+tutorial_tool_tip_02	tooltip_14	1,109,141,107	@10,67,123,34 Power Gauge passes the|halfway mark on|its way back
+tutorial_tool_tip_02	tooltip_16	143,109,141,62	@5,4,131,14 In Power Shot mode, press
+tutorial_tool_tip_02	tooltip_16	143,109,141,62	@53,18,79,13 after the Power
+tutorial_tool_tip_02	tooltip_16	143,109,141,62	@4,31,133,25 Gauge passes the halfway|mark on its way back.
+tutorial_tool_tip_02	tooltip_17	143,172,141,62	@10,4,29,13 Press
+tutorial_tool_tip_02	tooltip_17	143,172,141,62	@79,4,49,13 when the
+tutorial_tool_tip_02	tooltip_17	143,172,141,62	@3,17,136,39 Power Gauge passes the|halfway mark on its way back|in the Power Shot mode.
+tutorial_tool_tip_02	tooltip_18	285,1,141,62	@10,4,29,13 Press
+tutorial_tool_tip_02	tooltip_18	285,1,141,62	@79,4,49,13 when the
+tutorial_tool_tip_02	tooltip_18	285,1,141,62	@3,17,136,39 Power Gauge passes the|halfway mark on its way back|in the Power Shot mode.
+stroke_2	bluelagoon	0,0,439,116	@9,64,114,26 Blue Lagoon
+stroke_2	bluelagoon	0,0,439,116	@11,91,267,18 A beginner's course on a beautiful beach.
+stroke_2	pinkwind	0,116,439,116	@7,62,100,29 Pink Wind
+stroke_2	pinkwind	0,116,439,116	@11,91,240,18 A beginner's course on simple terrain.
+stroke_2	whitewiz	0,232,439,116	@7,62,100,29 White Wiz
+stroke_2	whitewiz	0,232,439,116	@11,91,352,18 An intermediate course where the ball slides on the ice.
+stroke_2	westwiz	0,348,439,116	@7,62,92,29 West Wiz
+stroke_2	westwiz	0,348,439,116	@11,91,191,18 A beginner's course on a cliff.
+stroke_3	bluemoon	0,0,439,116	@7,62,100,29 Blue Moon
+stroke_3	bluemoon	0,0,439,116	@11,91,388,18 An intermediate course under the starry sky of Pangya Island.
+stroke_3	sepiawind	0,116,439,116	@11,66,99,21 Sepia Wind
+stroke_3	sepiawind	0,116,439,116	@11,91,365,18 A beginner's course with trees and windmills as obstacles.
+stroke_3	wizwiz	0,232,439,116	@7,62,78,29 Wiz Wiz
+stroke_3	wizwiz	0,232,439,116	@11,91,300,18 An advanced course on complex terrain in fog.
+stroke_3	windhill	0,348,439,116	@7,62,88,29 Wind Hill
+stroke_3	windhill	0,348,439,116	@11,91,260,18 An intermediate course with strong wind.
+stroke_4	deepinferno	0,0,439,116	@11,66,113,21 Deep Inferno
+stroke_4	deepinferno	0,0,439,116	@11,91,327,18 A longer, advanced course in whirling volcanic ash.
+tutorial_tool_tip_02	tooltip_13	1,1,141,107	@5,5,106,12 Hit Point adjustment :
+tutorial_tool_tip_02	tooltip_13	1,1,141,107	@5,17,74,12 Analogue pad
+tutorial_tool_tip_02	tooltip_14	1,109,141,107	@5,5,106,12 Hit Point adjustment :
+tutorial_tool_tip_02	tooltip_14	1,109,141,107	@5,17,74,12 Analogue pad
+tutorial_tool_tip_02	tooltip_15	143,1,141,107	@5,5,106,12 Hit Point adjustment :
+tutorial_tool_tip_02	tooltip_15	143,1,141,107	@5,17,74,12 Analogue pad
+tutorial_tool_tip_02	tooltip_15	143,1,141,107	@5,32,52,10 Hit Point
+tutorial_tool_tip_02	tooltip_15	143,1,141,107	@5,42,52,10 location :
+tutorial_tool_tip_02	tooltip_15	143,1,141,107	@3,58,135,11 Press direction button in the
+tutorial_tool_tip_02	tooltip_15	143,1,141,107	@3,69,135,10 desired direction when the
+tutorial_tool_tip_02	tooltip_15	143,1,141,107	@3,79,135,10 Power Gauge passes the
+tutorial_tool_tip_02	tooltip_15	143,1,141,107	@3,89,135,13 halfway mark on its way back.
+equipment	GaugeText_A	400,197,51,70	Power|Control|Accuracy|Spin|Curve
+# Texts that mix colors and button icons, or aligned line by line: one box per run of text, from
+# tools/uitext/segments.tsv by tools/uitext/segment.py. The tutorial chapters' texts are named alike (one style group per chapter).
+tutorial_text_chapter_01	chapter_text_Z	0,326,256,27	@!104,0,47,12 Ok, ok!
+tutorial_text_chapter_01	chapter_text_Z	0,326,256,27	@!69,15,117,12 I was just kidding...
+tutorial_text_chapter_01	chapter_text_Z	0,117,256,67	@!35,0,36,12 Press
+tutorial_text_chapter_01	chapter_text_Z	0,117,256,67	@!86,0,139,12 for the overhead view.
+tutorial_text_chapter_01	chapter_text_Z	0,117,256,67	@!17,19,37,13 Press
+tutorial_text_chapter_01	chapter_text_Z	0,117,256,67	@!79,19,165,13 to move left and right, and
+tutorial_text_chapter_01	chapter_text_Z	0,117,256,67	@!34,37,37,13 press
+tutorial_text_chapter_01	chapter_text_Z	0,117,256,67	@!95,37,120,13 while holding down
+tutorial_text_chapter_01	chapter_text_Z	0,117,256,67	@!94,56,96,11 to zoom in/out.
+tutorial_text_chapter_01	chapter_text_Z	0,59,256,57	@!54,1,150,13 This interface shows you
+tutorial_text_chapter_01	chapter_text_Z	0,59,256,57	@!35,15,187,13 the club you're currently using.
+tutorial_text_chapter_01	chapter_text_Z	0,59,256,57	@!20,29,219,13 You can choose any of the 14 clubs
+tutorial_text_chapter_01	chapter_text_Z	0,59,256,57	@!71,43,73,13 by pressing
+tutorial_text_chapter_02	chapter_text_Z	0,147,256,44	@!18,1,81,13 Finally, press
+tutorial_text_chapter_02	chapter_text_Z	0,147,256,44	@!114,1,121,13 once more as close
+tutorial_text_chapter_02	chapter_text_Z	0,147,256,44	@!41,16,170,13 to the white line as possible
+tutorial_text_chapter_02	chapter_text_Z	0,147,256,44	@!82,31,92,12 to take a shot.
+tutorial_text_chapter_02	chapter_text_Z	0,103,256,43	@!22,2,74,13 Then, press
+tutorial_text_chapter_02	chapter_text_Z	0,103,256,43	@!111,2,119,13 again to determine
+tutorial_text_chapter_02	chapter_text_Z	0,103,256,43	@!27,16,198,13 the power of your swing and the
+tutorial_text_chapter_02	chapter_text_Z	0,103,256,43	@!28,30,200,13 distance you want to hit the ball.
+tutorial_text_chapter_02	chapter_text_Z	0,71,256,31	@!52,2,66,13 First, press
+tutorial_text_chapter_02	chapter_text_Z	0,71,256,31	@!133,2,72,13 to activate
+tutorial_text_chapter_02	chapter_text_Z	0,71,256,31	@!71,17,113,13 the Power Gauge.
+tutorial_text_chapter_03	chapter_text_Z	0,82,256,51	@!25,0,205,13 Ok. Hit the ball to the target area.
+tutorial_text_chapter_03	chapter_text_Z	0,82,256,51	@!29,13,102,13 Don't forget that
+tutorial_text_chapter_03	chapter_text_Z	0,82,256,51	@!131,13,95,13 only 85% of the
+tutorial_text_chapter_03	chapter_text_Z	0,82,256,51	@!29,26,43,13 power
+tutorial_text_chapter_03	chapter_text_Z	0,82,256,51	@!72,26,154,13 will be applied to the ball
+tutorial_text_chapter_03	chapter_text_Z	0,82,256,51	@!47,39,160,12 because it's in the bunker.
+tutorial_text_chapter_04	chapter_text_Z	0,267,256,26	@!104,0,49,12 Really?
+tutorial_text_chapter_04	chapter_text_Z	0,267,256,26	@!102,14,51,11 Thanks!
+tutorial_text_chapter_04	chapter_text_Z	0,129,256,16	@!39,3,74,13 Then, press
+tutorial_text_chapter_04	chapter_text_Z	0,129,256,16	@!128,3,93,13 to use an item.
+tutorial_text_chapter_04	chapter_text_Z	0,100,256,28	@!86,1,36,12 Press
+tutorial_text_chapter_04	chapter_text_Z	0,100,256,28	@!152,1,19,12 to
+tutorial_text_chapter_04	chapter_text_Z	0,100,256,28	@!71,16,117,12 open the Item Slot.
+tutorial_text_chapter_05	chapter_text_Z	0,469,256,27	@!107,0,42,12 Hehe.
+tutorial_text_chapter_05	chapter_text_Z	0,469,256,27	@!79,15,98,12 Really? Thanks.
+tutorial_text_chapter_05	chapter_text_Z	1,352,144,33	@!0,0,138,9 The ball will tilt to the left
+tutorial_text_chapter_05	chapter_text_Z	1,352,144,33	@!0,11,66,10 on a left lie.
+tutorial_text_chapter_05	chapter_text_Z	1,318,174,33	@!0,0,112,11 Dots leaning toward
+tutorial_text_chapter_05	chapter_text_Z	1,318,174,33	@!0,11,40,10 the left
+tutorial_text_chapter_05	chapter_text_Z	1,318,174,33	@!40,11,49,10 indicate
+tutorial_text_chapter_05	chapter_text_Z	1,318,174,33	@!0,22,9,10 a
+tutorial_text_chapter_05	chapter_text_Z	1,318,174,33	@!9,22,40,10 left lie.
+tutorial_text_chapter_05	chapter_text_Z	1,284,151,33	@!0,0,64,11 The ball will
+tutorial_text_chapter_05	chapter_text_Z	1,284,151,33	@!64,0,81,11 tilt to the right
+tutorial_text_chapter_05	chapter_text_Z	1,284,151,33	@!0,11,73,12 on a right lie.
+tutorial_text_chapter_05	chapter_text_Z	1,238,167,45	@!0,0,82,9 When the dots
+tutorial_text_chapter_05	chapter_text_Z	1,238,167,45	@!0,11,113,12 lean toward the right
+tutorial_text_chapter_05	chapter_text_Z	1,238,167,45	@!113,11,6,12 ,
+tutorial_text_chapter_05	chapter_text_Z	1,238,167,45	@!0,23,107,9 that means there is
+tutorial_text_chapter_05	chapter_text_Z	1,238,167,45	@!0,34,9,11 a
+tutorial_text_chapter_05	chapter_text_Z	1,238,167,45	@!9,34,42,11 right lie
+tutorial_text_chapter_05	chapter_text_Z	1,238,167,45	@!51,34,5,11 .
+tutorial_text_chapter_05	chapter_text_Z	1,203,133,34	@!0,0,119,9 The ball rolls out a bit
+tutorial_text_chapter_05	chapter_text_Z	1,203,133,34	@!0,11,39,10 shorter
+tutorial_text_chapter_05	chapter_text_Z	1,203,133,34	@!39,11,94,10 than intended on
+tutorial_text_chapter_05	chapter_text_Z	1,203,133,34	@!0,23,97,11 an upward slope.
+tutorial_text_chapter_05	chapter_text_Z	1,168,145,34	@!0,0,125,9 If the dots lean toward
+tutorial_text_chapter_05	chapter_text_Z	1,168,145,34	@!0,11,145,11 the bottom, that means an
+tutorial_text_chapter_05	chapter_text_Z	1,168,145,34	@!0,23,145,11 upward slope is up ahead.
+tutorial_text_chapter_05	chapter_text_Z	1,133,154,34	@!0,0,154,9 The ball rolls out a bit further
+tutorial_text_chapter_05	chapter_text_Z	1,133,154,34	@!0,11,108,10 than intended on a
+tutorial_text_chapter_05	chapter_text_Z	1,133,154,34	@!0,23,95,11 downward slope.
+tutorial_text_chapter_05	chapter_text_Z	1,98,164,34	@!0,0,82,9 If the dots lean
+tutorial_text_chapter_05	chapter_text_Z	1,98,164,34	@!82,0,43,9 toward
+tutorial_text_chapter_05	chapter_text_Z	1,98,164,34	@!0,11,39,12 the top
+tutorial_text_chapter_05	chapter_text_Z	1,98,164,34	@!39,11,82,12 , that means a
+tutorial_text_chapter_05	chapter_text_Z	1,98,164,34	@!0,23,91,11 downward slope
+tutorial_text_chapter_05	chapter_text_Z	1,98,164,34	@!91,23,72,11 is up ahead.
+tutorial_text_chapter_05	chapter_text_Z	0,36,256,61	@!38,0,177,12 Can you see the dots placed
+tutorial_text_chapter_05	chapter_text_Z	0,36,256,61	@!21,12,211,13 on the left side of each rectangle?
+tutorial_text_chapter_05	chapter_text_Z	0,36,256,61	@!26,25,199,11 This means that there is a left lie.
+tutorial_text_chapter_05	chapter_text_Z	0,36,256,61	@!77,37,98,12 In this situation,
+tutorial_text_chapter_05	chapter_text_Z	0,36,256,61	@!49,49,158,12 aim to the right a little bit.
+tutorial_text_chapter_06	chapter_text_Z	0,155,256,57	@!0,0,253,13 When one yellow block of the gauge gets
+tutorial_text_chapter_06	chapter_text_Z	0,155,256,57	@!5,15,231,13 filled and becomes red, you can press
+tutorial_text_chapter_06	chapter_text_Z	0,155,256,57	@!7,30,243,13 to take a Power Shot. The gauge will go
+tutorial_text_chapter_06	chapter_text_Z	0,155,256,57	@!13,45,230,12 down by one block when you do that.
+tutorial_text_chapter_06	chapter_text_Z	0,84,256,42	@!19,0,217,13 This shows you how many shots you
+tutorial_text_chapter_06	chapter_text_Z	0,84,256,42	@!9,15,202,13 have taken and your score. Press
+tutorial_text_chapter_06	chapter_text_Z	0,84,256,42	@!32,30,194,12 toview the details of your score.
+tutorial_text_chapter_07	chapter_text_Z	0,245,256,49	@!24,1,212,12 You failed. Lower the Hit Point with
+tutorial_text_chapter_07	chapter_text_Z	0,245,256,49	@!3,19,163,13 the analog stick and press
+tutorial_text_chapter_07	chapter_text_Z	0,245,256,49	@!190,19,63,13 when the
+tutorial_text_chapter_07	chapter_text_Z	0,245,256,49	@!17,37,229,12 Power Gauge comes back. Try again.
+tutorial_text_chapter_07	chapter_text_Z	0,114,256,74	@!19,0,217,13 After the Power Gauge is activated,
+tutorial_text_chapter_07	chapter_text_Z	0,114,256,74	@!17,18,37,13 press
+tutorial_text_chapter_07	chapter_text_Z	0,114,256,74	@!75,18,161,13 once as the Power Gauge
+tutorial_text_chapter_07	chapter_text_Z	0,114,256,74	@19,36,215,13 passes the halfway mark on its way
+tutorial_text_chapter_07	chapter_text_Z	0,114,256,74	@!25,49,203,13 back, then you must hit a perfect
+tutorial_text_chapter_07	chapter_text_Z	0,114,256,74	@!8,62,236,12 Pangya Shot for the Backspin to occur.
+tutorial_text_chapter_08	chapter_text_Z	0,204,256,50	@!16,0,221,13 Oh, no! You missed it. Don't forget to
+tutorial_text_chapter_08	chapter_text_Z	0,204,256,50	@!19,19,156,13 adjust the Hit Point, press
+tutorial_text_chapter_08	chapter_text_Z	0,204,256,50	@!196,19,37,13 once
+tutorial_text_chapter_08	chapter_text_Z	0,204,256,50	@!34,38,188,12 and hit a perfect Pangya Shot.
+tutorial_text_chapter_08	chapter_text_Z	0,99,256,63	@!16,0,224,13 Next, activate the Power Gauge and
+tutorial_text_chapter_08	chapter_text_Z	0,99,256,63	@!27,13,202,12 when it passes the halfway mark,
+tutorial_text_chapter_08	chapter_text_Z	0,99,256,63	@!31,31,37,13 press
+tutorial_text_chapter_08	chapter_text_Z	0,99,256,63	@!89,31,141,13 once and hit a perfect
+tutorial_text_chapter_08	chapter_text_Z	0,99,256,63	@!25,50,203,13 Pangya Shot to hit a Topspin Shot
+tutorial_text_chapter_08	chapter_text_Z	0,99,256,63	@!228,50,6,13 .
+tutorial_text_chapter_08	chapter_text_Z	0,56,256,42	@!10,0,233,12 This circle in the center is the Hit Point.
+tutorial_text_chapter_08	chapter_text_Z	0,56,256,42	@!41,15,172,13 Use the analog stick to raise
+tutorial_text_chapter_08	chapter_text_Z	0,56,256,42	@!8,30,235,12 this Hit Point to where you want it to be
+tutorial_text_chapter_08	chapter_text_Z	0,56,256,42	@!243,30,6,12 .
+tutorial_text_chapter_09	chapter_text_Z	0,345,256,42	@!27,0,159,13 Meh... missed it... Pressing
+tutorial_text_chapter_09	chapter_text_Z	0,345,256,42	@!11,15,235,13 when the Power Gauge comes back is
+tutorial_text_chapter_09	chapter_text_Z	0,345,256,42	@!65,30,129,12 important. Try again.
+tutorial_text_chapter_09	chapter_text_Z	0,302,256,42	@!11,0,234,13 Ok, you try it now. Don't forget to press
+tutorial_text_chapter_09	chapter_text_Z	0,302,256,42	@!70,15,156,13 atthe right time when the
+tutorial_text_chapter_09	chapter_text_Z	0,302,256,42	@!45,30,166,12 Power Gauge comes back.
+tutorial_text_chapter_09	chapter_text_Z	0,157,256,58	@!12,1,228,11 In the Power Shot mode, start the shot and
+tutorial_text_chapter_09	chapter_text_Z	0,157,256,58	@!10,16,233,12 when the Power Gauge passes the halfway
+tutorial_text_chapter_09	chapter_text_Z	0,157,256,58	@!9,31,149,12 mark on its way back, press
+tutorial_text_chapter_09	chapter_text_Z	0,157,256,58	@!200,31,45,12 and hit
+tutorial_text_chapter_09	chapter_text_Z	0,157,256,58	@!1,46,253,12 a perfect Pangya Shot to hit a Tomahawk Shot.
+tutorial_text_chapter_09	chapter_text_Z	0,112,256,44	@!19,0,214,13 The Tomahawk Shot is a technique
+tutorial_text_chapter_09	chapter_text_Z	0,112,256,44	@!13,15,225,13 you can use in the Power Shot mode.
+tutorial_text_chapter_09	chapter_text_Z	0,112,256,44	@!2,30,34,12 Press
+tutorial_text_chapter_09	chapter_text_Z	0,112,256,44	@!51,30,203,12 to activate the Power Shot mode.
+tutorial_text_chapter_10	chapter_text_Z	0,289,256,42	@!17,1,69,12 So I have to
+tutorial_text_chapter_10	chapter_text_Z	0,289,256,42	@!86,1,158,12 press the directional buttons
+tutorial_text_chapter_10	chapter_text_Z	0,289,256,42	@!19,16,222,10 in the direction of the Hit Point and hit a
+tutorial_text_chapter_10	chapter_text_Z	0,289,256,42	@!15,31,73,11 Pangya Shot
+tutorial_text_chapter_10	chapter_text_Z	0,289,256,42	@!88,31,156,11 , right? Ok, I'll get it this time.
+tutorial_text_chapter_10	chapter_text_Z	0,215,256,48	@!12,1,29,12 then
+tutorial_text_chapter_10	chapter_text_Z	0,215,256,48	@!41,1,201,12 press the left or right button towards
+tutorial_text_chapter_10	chapter_text_Z	0,215,256,48	@!10,13,72,12 the Hit Point
+tutorial_text_chapter_10	chapter_text_Z	0,215,256,48	@!82,13,164,12 until the Power Gauge comes
+tutorial_text_chapter_10	chapter_text_Z	0,215,256,48	@!24,25,205,12 back after passing the halfway mark
+tutorial_text_chapter_10	chapter_text_Z	0,215,256,48	@!62,37,131,11 and hit a Pangya Shot.
+tutorial_text_chapter_11	chapter_text_Z	0,260,256,42	@!89,0,77,12 You missed!
+tutorial_text_chapter_11	chapter_text_Z	0,260,256,42	@!20,15,36,13 Press
+tutorial_text_chapter_11	chapter_text_Z	0,260,256,42	@!97,15,140,13 after the Power Gauge
+tutorial_text_chapter_11	chapter_text_Z	0,260,256,42	@!2,30,251,12 passes the halfway mark on its way back!
+tutorial_text_chapter_11	chapter_text_Z	0,217,256,42	@!84,0,90,13 Now you try it!
+tutorial_text_chapter_11	chapter_text_Z	0,217,256,42	@!44,15,125,13 Don't forget to press
+tutorial_text_chapter_11	chapter_text_Z	0,217,256,42	@!16,30,225,12 when the Power Gauge comes back!
+tutorial_text_chapter_11	chapter_text_Z	0,69,256,53	@!23,0,208,13 After activating the Power Gauge,
+tutorial_text_chapter_11	chapter_text_Z	0,69,256,53	@!22,14,38,13 press
+tutorial_text_chapter_11	chapter_text_Z	0,69,256,53	@!102,14,131,13 and then take a shot
+tutorial_text_chapter_11	chapter_text_Z	0,69,256,53	@!33,28,189,13 when the Power Gauge comes
+tutorial_text_chapter_11	chapter_text_Z	0,69,256,53	@!59,42,139,11 back for a Cobra Shot!
+tutorial_text_chapter_12	chapter_text_Z	0,312,256,42	@!71,0,115,13 Oh, no.. Try again.
+tutorial_text_chapter_12	chapter_text_Z	0,312,256,42	@!45,15,125,13 Don't forget to press
+tutorial_text_chapter_12	chapter_text_Z	0,312,256,42	@!17,30,226,12 when the Power Gauge comes back.
+tutorial_text_chapter_12	chapter_text_Z	0,155,256,57	@!42,0,170,13 Whe-when the Power Gauge
+tutorial_text_chapter_12	chapter_text_Z	0,155,256,57	@!88,15,81,12 comes back,
+tutorial_text_chapter_12	chapter_text_Z	0,155,256,57	@!58,30,37,13 press
+tutorial_text_chapter_12	chapter_text_Z	0,155,256,57	@!137,30,59,13 and then
+tutorial_text_chapter_12	chapter_text_Z	0,155,256,57	@!90,45,73,12 take a shot.
+tutorial_text_chapter_12	chapter_text_Z	0,84,256,42	@!107,0,43,12 Good!
+tutorial_text_chapter_12	chapter_text_Z	0,84,256,42	@!79,15,98,13 That's the spirit!
+tutorial_text_chapter_12	chapter_text_Z	0,84,256,42	@!80,30,96,12 Let's start then!
+pangyashop_2	detail_off_A	225,238,42,63	@!8,2,34,12 Power
+pangyashop_2	detail_off_A	225,238,42,63	@!4,14,38,12 Control
+pangyashop_2	detail_off_A	225,238,42,63	@!0,26,42,13 Accuracy
+pangyashop_2	detail_off_A	225,238,42,63	@!16,39,26,12 Spin
+pangyashop_2	detail_off_A	225,238,42,63	@!9,51,33,11 Curve
+tip	tip_txt_1	1,1,207,12	@!0,0,58,12 There's a
+tip	tip_txt_1	1,1,207,12	@!58,0,74,12 strong wind
+tip	tip_txt_1	1,1,207,12	@!132,0,75,12 . Be careful..
+tip	tip_txt_2	1,14,244,12	@!0,1,63,11 Hit the ball
+tip	tip_txt_2	1,14,244,12	@!63,1,41,11 harder
+tip	tip_txt_2	1,14,244,12	@!104,1,97,11 than usual in the
+tip	tip_txt_2	1,14,244,12	@!201,1,43,11 bunker.
+tip	tip_txt_3	1,27,250,12	@!0,1,55,11 Hit the ball
+tip	tip_txt_3	1,27,250,12	@!55,1,36,11 harder
+tip	tip_txt_3	1,27,250,12	@!91,1,87,11 than usual on an
+tip	tip_txt_3	1,27,250,12	@!178,1,72,11 upward slope.
+tip	tip_txt_4	1,40,254,12	@!0,1,55,11 Hit the ball
+tip	tip_txt_4	1,40,254,12	@!55,1,33,11 lighter
+tip	tip_txt_4	1,40,254,12	@!88,1,81,11 than usual on a
+tip	tip_txt_4	1,40,254,12	@!169,1,85,11 downward slope.
+tip	tip_txt_5	1,53,244,12	@!0,1,170,11 You can't use this club on this
+tip	tip_txt_5	1,53,244,12	@!170,1,74,11 ground type.
+tip	tip_txt_6	1,66,253,12	@!0,0,91,12 You can use a
+tip	tip_txt_6	1,66,253,12	@!91,0,73,12 Power Shot
+tip	tip_txt_6	1,66,253,12	@!164,0,74,12 by pressing
+tip	tip_txt_6	1,66,253,12	@!250,0,3,12 .
+tip	tip_txt_7	1,79,245,12	@!0,1,31,11 Press
+tip	tip_txt_7	1,79,245,12	@!43,1,72,11 to make the
+tip	tip_txt_7	1,79,245,12	@!115,1,130,11 character transparent.
+tutorial_sub_title_tip	tip_06_Z	2,96,250,18	@18,0,232,18 Let's learn how to calculate the score.
+tutorial_sub_title_tip	tip_05_Z	13,77,228,18	@18,0,210,18 Let's learn some green strategies.
+tutorial_sub_title_tip	tip_04_Z	30,58,219,18	@18,0,201,18 Let's learn how to use the items
+tutorial_sub_title_tip	tip_03_Z	38,39,192,18	@18,0,174,18 Let's learn the ground type
+tutorial_sub_title_tip	tip_02_Z	29,20,223,18	@18,0,205,18 Practice using the Power Gauge
+tutorial_sub_title_tip	tip_01_Z	41,1,173,18	@18,0,155,18 Practice using the club.
+tutorial_next	next	31,19,33,13	Next
+# [font_mission_success: big letters the game puts together into SUCCESS, FAILURE, CHIP IN and ranks (1st...)
+[font_mission_success	chipin_letters	207,1,36,39	H
+[font_mission_success	chipin_letters	38,122,19,39	I
+[font_mission_success	chipin_letters	1,122,36,41	N
+[font_mission_success	chipin_letters	66,41,35,39	P
+[font_mission_success	failure_letters	38,81,36,40	A
+[font_mission_success	failure_letters	34,1,31,39	E
+[font_mission_success	failure_letters	34,41,31,39	F
+[font_mission_success	failure_letters	226,41,19,39	I
+[font_mission_success	failure_letters	173,1,33,39	L
+[font_mission_success	failure_letters	66,1,35,39	R
+[font_mission_success	failure_letters	136,1,36,39	U
+[font_mission_success	rank_letters	138,41,23,39	1
+[font_mission_success	rank_letters	1,1,32,39	2
+[font_mission_success	rank_letters	1,41,32,39	3
+[font_mission_success	rank_letters	1,81,36,40	4
+[font_mission_success	rank_letters	185,81,33,39	5
+[font_mission_success	rank_letters	219,81,33,39	6
+[font_mission_success	rank_letters	102,41,35,39	7
+[font_mission_success	rank_letters	102,1,33,39	8
+[font_mission_success	rank_letters	208,121,31,38	d
+[font_mission_success	rank_letters	176,122,31,38	d
+[font_mission_success	rank_letters	194,41,31,39	h
+[font_mission_success	rank_letters	142,122,33,34	n
+[font_mission_success	rank_letters	58,122,27,34	r
+[font_mission_success	rank_letters	68,161,31,35	s
+[font_mission_success	rank_letters	86,122,27,38	t
+[font_mission_success	rank_letters	114,122,27,38	t
+[font_mission_success	success_letters	110,81,37,40	C
+[font_mission_success	success_letters	162,41,31,39	E
+[font_mission_success	success_letters	75,81,34,40	S
+[font_mission_success	success_letters	148,81,36,40	U
+pangyashop_2	detail_on_A	268,238,50,63	Power|Control|Accuracy|Spin|Curve
+pangyashop_3	slot_sold	40,1,87,129	@9,104,70,17 Sold Out
+# result_font_02: the letters of the hole results (BIRDIE, PAR, BOGEY, EAGLE, ALBATROSS, HOLE IN ONE, Double, Triple,
+# WATER/MAGMA HAZARD, OB., WIN, LOSE, DRAW, GIVE UP) and their numbers. Double and Triple: capital, then small letters.
+result_font_02	albatross_letters	70,123,37,40	A
+result_font_02	albatross_letters	34,123,35,39	B
+result_font_02	albatross_letters	1,121,32,39	L
+result_font_02	albatross_letters	70,82,39,40	O
+result_font_02	albatross_letters	110,82,35,39	R
+result_font_02	albatross_letters	35,82,34,40	S
+result_font_02	albatross_letters	146,81,36,39	T
+result_font_02	birdie_letters	164,41,35,39	B
+result_font_02	birdie_letters	69,42,38,39	D
+result_font_02	birdie_letters	37,42,31,39	E
+result_font_02	birdie_letters	144,41,19,39	I
+result_font_02	birdie_letters	108,42,35,39	R
+result_font_02	bogie_letters	133,1,35,39	B
+result_font_02	bogie_letters	1,1,32,39	E
+result_font_02	bogie_letters	54,1,39,40	G
+result_font_02	bogie_letters	34,1,19,39	I
+result_font_02	bogie_letters	94,1,38,40	O
+result_font_02	bogie_letters	449,164,37,40	Y
+result_font_02	double_letters	233,206,24,28	b
+result_font_02	double_letters	180,205,27,28	D
+result_font_02	double_letters	265,125,25,26	e
+result_font_02	double_letters	262,181,16,28	l
+result_font_02	double_letters	287,82,26,26	o
+result_font_02	double_letters	208,206,24,30	p
+result_font_02	double_letters	291,109,24,26	u
+result_font_02	draw_letters	40,164,37,39	D
+result_font_02	draw_letters	142,122,55,40	W
+result_font_02	eagle_letters	257,41,37,40	A
+result_font_02	eagle_letters	156,163,32,39	E
+result_font_02	eagle_letters	1,163,38,40	G
+result_font_02	eagle_letters	1,81,33,39	L
+result_font_02	giveup_letters	316,82,32,39	E
+result_font_02	giveup_letters	408,41,38,40	G
+result_font_02	giveup_letters	484,41,19,39	I
+result_font_02	giveup_letters	386,82,35,39	P
+result_font_02	giveup_letters	349,82,36,39	U
+result_font_02	giveup_letters	447,41,36,40	V
+result_font_02	holeinone_letters	183,82,31,39	E
+result_font_02	holeinone_letters	243,1,36,39	H
+result_font_02	holeinone_letters	160,203,19,39	I
+result_font_02	holeinone_letters	108,123,33,39	L
+result_font_02	holeinone_letters	220,42,36,41	N
+result_font_02	holeinone_letters	116,163,39,40	O
+result_font_02	lose_letters	232,125,32,39	E
+result_font_02	lose_letters	280,1,32,39	L
+result_font_02	lose_letters	223,165,38,40	O
+result_font_02	lose_letters	252,84,34,40	S
+result_font_02	magma_letters	378,123,36,40	A
+result_font_02	magma_letters	374,164,37,40	D
+result_font_02	magma_letters	415,123,38,40	G
+result_font_02	magma_letters	454,123,36,40	H
+result_font_02	magma_letters	337,123,40,40	M
+result_font_02	magma_letters	412,164,36,40	R
+result_font_02	magma_letters	337,164,36,40	Z
+result_font_02	number_letters	215,84,36,40	4
+result_font_02	number_letters	198,125,33,39	5
+result_font_02	number_letters	189,165,33,39	6
+result_font_02	number_letters	69,206,35,39	7
+result_font_02	number_letters	35,204,33,39	8
+result_font_02	number_letters	1,204,33,39	9
+result_font_02	number_letters	279,181,29,28	+
+result_font_02	ob_letters	316,122,20,19	.
+result_font_02	ob_letters	461,82,35,39	B
+result_font_02	ob_letters	422,82,38,40	O
+result_font_02	par_letters	205,1,37,40	A
+result_font_02	par_letters	1,41,35,39	P
+result_font_02	par_letters	169,1,35,39	R
+result_font_02	triple_letters	292,136,17,29	i
+result_font_02	triple_letters	258,210,21,26	r
+result_font_02	triple_letters	265,152,26,28	T
+result_font_02	water_letters	369,1,37,40	A
+result_font_02	water_letters	370,42,37,39	D
+result_font_02	water_letters	443,1,31,39	E
+result_font_02	water_letters	295,42,36,39	H
+result_font_02	water_letters	475,1,35,39	R
+result_font_02	water_letters	407,1,35,39	T
+result_font_02	water_letters	313,1,55,40	W
+result_font_02	water_letters	332,42,37,39	Z
+result_font_02	win_letters	200,42,19,39	I
+result_font_02	win_letters	78,164,37,41	N
+result_font_02	win_letters	105,206,54,40	W
+[ground	fairway_ground	1,1,132,41	Fairway
+[ground	rough_ground	135,1,102,41	Rough
+[ground	green_ground	1,43,103,36	Green
+[ground	ice_ground	105,43,52,36	Ice
+[ground	sand_ground	160,43,82,36	Sand
+[ground	tee_ground	2,80,64,35	Tee
+[ground	bunker_ground	67,80,119,35	Bunker

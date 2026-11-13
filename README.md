@@ -42,8 +42,12 @@ browser tab, and to play it together again.
   [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) anime model at 4x, and each one was checked
   against its original. They come as a separate download and never change the game's files: turn
   them off and on in the settings menu.
+- **Vector text**: the game's words redrawn sharp with a font at the render scale, in its own
+  colors and outlines: the lines it writes as it runs (menus, descriptions, messages) and the
+  words baked into its interface art (titles, buttons, the HUD's digits), over the HD textures
+  when they are on.
 - **A browser version**: the game in a tab, with a settings menu (Esc): fullscreen, keyboard keys
-  and gamepad buttons, HD textures.
+  and gamepad buttons, internal resolution, HD textures, vector text.
 - **Players**: each player logs in and keeps their own save; their name is their nickname online.
 - **Network Mode online**: the PSP's ad hoc Wi-Fi play, over the internet, through
   [LiveKit](https://livekit.io).
@@ -92,7 +96,8 @@ your UMD ─▶ ISO ─▶ EBOOT.BIN (encrypted) ─▶ EBOOT_decrypted.elf
 | What | Used for |
 |---|---|
 | **C** (GNU C11), **GCC**, **Make** | the generated game code, the runtime, the mods |
-| **Python 3** | the recompiler, the build tools, the local web server (standard library only) |
+| **Python 3** | the recompiler, the build tools, the local web server (standard library only); Pillow for the vector text's generator |
+| **stb_truetype**, **TeX Gyre Adventor** | the vector text: the font's outlines at any size |
 | **SDL2** | window, input and sound in the native build |
 | **OpenGL ES 3 / WebGL 2** | the PSP's graphics chip, rendered at 4x |
 | **Emscripten** (WebAssembly, Asyncify) | the browser build; the PSP's threads become fibers |
@@ -109,7 +114,7 @@ your UMD ─▶ ISO ─▶ EBOOT.BIN (encrypted) ─▶ EBOOT_decrypted.elf
 **To build** (Linux; on Windows use WSL2 with Ubuntu):
 
 ```bash
-sudo apt install build-essential pkg-config git python3 libsdl2-dev libgles-dev
+sudo apt install build-essential pkg-config git python3 python3-pil libsdl2-dev libgles-dev
 ```
 
 - For the browser build, the **Emscripten SDK** (tested with 3.1.46):
@@ -173,6 +178,20 @@ yours to build, never commit or share it.**
 
 Redoing the analysis yourself is optional: it needs Ghidra, see `re/README.md`.
 
+Then the vector text's description of the interface art:
+
+```bash
+make generated/ui_text.spec        # ISO_PATH="path/to/the.iso" if it isn't next to pangya-port
+```
+
+It reads the interface's pictures from your ISO and, for every word in them (transcribed in
+`tools/uitext/labels.tsv`), finds the font size, weight, colors, outlines and glow that match the
+original pixels: the game uses it to redraw those words sharp at any resolution. The first run is
+long: about 4 hours of CPU spread over every core (about 20 minutes with 16 threads, an hour with
+4); the results are kept in `build/uitext_cache`, so the next ones take seconds. The result,
+`generated/ui_text.spec`, is made from the game's art like the rest of `generated/`: yours only.
+Without it, only the lines the game writes as it runs get the vector font.
+
 ### 4. Get FFmpeg
 
 ```bash
@@ -209,7 +228,9 @@ what the game reads), keeps the saves in the project folder and handles the play
   sign-in screen shows the game's title illustration, read from your ISO (in HD when the texture
   pack is installed).
 - **Esc** (or the gear in the corner, or Home on a gamepad) opens the settings: fullscreen (also
-  F11 or a double click), keys, gamepad buttons, HD textures.
+  F11 or a double click), keys, gamepad buttons, internal resolution (1x to 4x), HD textures,
+  how the original textures are filtered (smooth, sharp or pixels) and the vector text (on by
+  default).
 - Without the server (the page opened some other way) the page asks for the ISO file and keeps
   the save in the browser.
 
@@ -352,8 +373,8 @@ There is no database server: everything is plain files in your `port/build/` fol
 ## Things to know
 
 - **Legal**: this repository holds only the port's own code, the analysis data (addresses and
-  names), the game's logo for the sign-in page and Pangya's icon (from pangya.community) for the
-  browser tab. The game, its code and its art belong to their owners. Don't publish builds, generated
+  names), the transcription of the words in the interface's pictures (for the vector text), the
+  game's logo for the sign-in page and Pangya's icon (from pangya.community) for the browser tab. The game, its code and its art belong to their owners. Don't publish builds, generated
   code, ISOs or EBOOTs. The HD texture pack is derived from the game's art and meant for people
   who own the game.
 - **Native builds**: Linux only for now (the browser build runs everywhere). Native online play
@@ -376,8 +397,10 @@ port/
                   video, saves, network, texture packs)
   mods/           the mods (C), hooked by address in hooks.txt
   web/            the browser page (shell.html), audio and LiveKit glue
-  tools/          generate.sh, recomp.py, prx_load.py, serve_web.py, textures.py, build scripts
-  third_party/    FFmpeg's headers (the libraries come from tools/get_ffmpeg.sh)
+  tools/          generate.sh, recomp.py, prx_load.py, serve_web.py, textures.py, build scripts;
+                  uitext/: the vector text's generator and the transcribed interface words
+  assets/fonts/   TeX Gyre Adventor, the vector text's font
+  third_party/    FFmpeg's headers (the libraries come from tools/get_ffmpeg.sh), stb_truetype
 re/
   export/         the analysis: program.json (functions, jump tables), imports, fixups
   ghidra_scripts/ how program.json was made (Ghidra)
@@ -391,7 +414,9 @@ re/
   its tables of PSP system function names.
 - [Ghidra](https://ghidra-sre.org), [Emscripten](https://emscripten.org),
   [SDL](https://www.libsdl.org), [FFmpeg](https://ffmpeg.org), [LiveKit](https://livekit.io)
-  (client library, Apache-2.0), [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) (BSD-3-Clause).
+  (client library, Apache-2.0), [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) (BSD-3-Clause),
+  [TeX Gyre Adventor](https://www.gust.org.pl/projects/e-foundry/tex-gyre/adventor) (GUST Font
+  License), [stb_truetype](https://github.com/nothings/stb) (public domain / MIT).
 - Everyone keeping Pangya alive at [pangya.community](https://pangya.community).
 
 ## License

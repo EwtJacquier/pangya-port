@@ -56,6 +56,9 @@ WEB_LDFLAGS = -O2 -sASYNCIFY -sINITIAL_MEMORY=512MB -sALLOW_MEMORY_GROWTH -sMAXI
 	-sEXPORTED_RUNTIME_METHODS=callMain,FS,ENV,IDBFS,addRunDependency,removeRunDependency \
 	-sEXPORTED_FUNCTIONS=_main --preload-file generated/image.bin@/image.bin $(WEB_EXTRA_FILES) \
 	--shell-file web/shell.html --pre-js web/audio.js --pre-js web/net.js
+WEB_EXTRA_FILES = $(if $(wildcard assets/fonts/*),--preload-file assets/fonts@/assets/fonts) \
+	$(if $(wildcard generated/ui_text.spec),--preload-file generated/ui_text.spec@/generated/ui_text.spec)
+WEB_EXTRA_DEPS = $(wildcard assets/fonts/*) $(wildcard generated/ui_text.spec)
 
 web: build/web/index.html build/web/livekit-client.umd.js $(patsubst web/%,build/web/%,$(wildcard web/*.png))
 
@@ -76,5 +79,10 @@ build/wmods/%.o: mods/%.c runtime/rt.h runtime/cpu.h runtime/text.h runtime/font
 build/wgen build/wrt build/wmods build/web:
 	mkdir -p $@
 
+# Text sprites of the UI atlases (needs the ISO; see tools/uitext/build.py).
+# (the ISO next to port/, or next to the repository's folder)
+ISO_PATH ?= $(if $(wildcard ../Pangya*.iso),../Pangya - Fantasy Golf (USA).iso,../../Pangya - Fantasy Golf (USA).iso)
+generated/ui_text.spec: tools/uitext/build.py tools/uitext/fit.py tools/uitext/edt.c tools/uitext/gim.py tools/uitext/labels.tsv $(wildcard assets/fonts/*)
+	python3 -I tools/uitext/build.py "$(ISO_PATH)"
 
 .PHONY: web

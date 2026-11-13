@@ -335,6 +335,7 @@
     <div class="row"><span>Original textures<br><span class="sub">The game's own pictures: smooth as the PSP filters them, sharp (xBR) or as crisp pixels; Sharp and Pixels turn the HD textures off</span></span><div class="seg" id="texf"></div></div>
 
     <div class="row"><span>HD textures<br><span class="sub">The texture pack in build/textures; off: the game's own textures</span></span><button id="hd">On</button></div>
+    <div class="row"><span>Vector text<br><span class="sub">Menus, messages and the interface's words redrawn sharp with a font (over the HD textures when they are on)</span></span><button id="vt">Off</button></div>
 
     <h2>Keyboard <button class="link" id="keys-reset">Restore defaults</button></h2>
     <div class="grid" id="keys"></div>
@@ -396,6 +397,7 @@ if (!window.pangyaMobile) {
       hd: s.hd !== false && !(s.texFilter > 0),  // the texture pack: on when there is one (not with sharp originals)
       scale: [1, 2, 3, 4].includes(s.scale) ? s.scale : 4,  // the render scale
       texFilter: [0, 1, 2].includes(s.texFilter) ? s.texFilter : 0,  // the game's own textures: 0 smooth, 1 xBR, 2 pixels
+      vt: s.vt !== false,  // vector text (a build with runtime/text.c): on unless the player turns it off
     };
   }
   const settings = loadSettings();
@@ -426,6 +428,10 @@ if (!window.pangyaMobile) {
   function applyVideo() {
     Module.pangyaLive = {scale: settings.scale, uiFilter: 0, dirty: true};
     Module.pangyaTexFilter = {mode: settings.texFilter, dirty: true};
+  }
+  // The vector text (platform_web.c: the game's lines and the interface's words, both at once).
+  function applyText() {
+    Module.pangyaText = {strings: settings.vt, ui: settings.vt, dirty: true};
   }
 
   // ---- Menu ------------------------------------------------------------------------------------
@@ -468,7 +474,7 @@ if (!window.pangyaMobile) {
   function render() {
     const focusedIdx = [...menu.querySelectorAll('button')].indexOf(document.activeElement);
     document.getElementById('fs').textContent = document.fullscreenElement ? 'Leave' : 'Enter';
-    const toggles = [['hd', settings.hd]];
+    const toggles = [['hd', settings.hd], ['vt', settings.vt]];
     for (const [id, on] of toggles) {
       const b = document.getElementById(id);
       if (!b) continue;
@@ -547,6 +553,9 @@ if (!window.pangyaMobile) {
     settings.hd = !settings.hd;
     if (settings.hd && settings.texFilter) { settings.texFilter = 0; applyVideo(); }  // the HD textures: smooth originals
     saveSettings(); applyHd(); render();
+  });
+  document.getElementById('vt').addEventListener('click', () => {
+    settings.vt = !settings.vt; saveSettings(); applyText(); render();
   });
   canvas.addEventListener('dblclick', toggleFullscreen);
 
@@ -764,6 +773,7 @@ if (!window.pangyaMobile) {
   });
   applyInput();
   applyHd();
+  applyText();
   function start() {
     if (!Module.ready || !Module.isoBlob || !Module.pangyaPreloaded || Module.started) return;
     Module.started = true;

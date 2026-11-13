@@ -145,6 +145,7 @@ at its own resolution. `PANGYA_TEXPACK_LOG=1` logs every upload's key and every 
     title (instead of "New Game / Load Game"): with a save it loads it; without one it starts a new
     game (name). The d-pad doesn't move the cursor. The button keeps its own word, "Load Game" with
     a save and "New Game" without one, which is what it does.
+    (With the interface's vector text on, it reads "Start Game".)
   - Unlock (`mods/unlock.c`, `PANGYA_MOD_UNLOCK=0`): all 18 characters available, the shops sell
     every class-gated item (only while they build their lists; the player's class doesn't change)
     and the whole Pangya Collection gallery (4 videos, 15 artworks, 20 music tracks). The flags go
@@ -232,6 +233,50 @@ at its own resolution. `PANGYA_TEXPACK_LOG=1` logs every upload's key and every 
     until its result came, `PANGYA_TEST_FF=1` speeds the others' shots up (cross),
     `PANGYA_NET_TRACE=1` (2: with each mode change's caller) logs the turns, `PANGYA_GAME_LOG=1`
     prints the game's own debug messages (a printf the release build left empty).
+  - Vector text (`mods/font.c` + `runtime/text.c`): the lines the game's font engine writes into
+    textures (menus, descriptions, messages) are redrawn with TeX Gyre Adventor (`assets/fonts`,
+    GUST license) at the render scale, same positions and colors. Together with the vector text of
+    the interface (the atlases below: menu titles, tutorial pages, HUD digits) it is one switch on
+    the web page (Esc → Vector text, on by default; with the HD textures on, the words are drawn
+    over the pack's art). Natively both are off unless `PANGYA_MOD_TEXT=1` and `PANGYA_UITEXT=1`
+    (on the web they also work as URL parameters).
+  - Text baked into the UI atlases (HUD digits and letters, labels): `make generated/ui_text.spec`
+    (`ISO_PATH=...` if the ISO is somewhere else; needs Pillow) runs `tools/uitext/build.py`, which
+    reads
+    the `.gim` + `.txt` files of `pspdata.pak` and, for each sprite with text, fits the style by
+    rendering candidates and comparing pixel by pixel with the original (`tools/uitext/fit.py`:
+    regular/bold font, weight, up to 3 outlines + glow, a deeper outline at the bottom, a gradient
+    only where there is one; each line's size and position refined; border colors by least
+    squares in `tools/uitext/edt.c`). It writes `generated/ui_text.spec`; the runtime recognizes
+    the atlas by its CRC and redraws those sprites as vectors with distance-field outlines.
+    `tools/uitext/review.py` makes side-by-side sheets (original | vector); `PANGYA_UITEXT_DUMP=dir`
+    writes each atlas before/after. The text of ~1,250 labels (menus, buttons, messages, names,
+    tutorial tips, banners) is transcribed by hand in `tools/uitext/labels.tsv` ("|" splits lines;
+    `@x,y,w,h` marks where the text sits in a sprite with art around it, and a sprite may have
+    several boxes); the generator only fits style and position. Glyph sets (digits, letters) come
+    from the sprite names (`font2_7`, `num_07`, `middle-`...) when they all use the same colors
+    (numbered icons such as `gift_1`..`gift_9` don't qualify); atlases without a sprite list get
+    one in `tools/uitext/sprites.tsv`. Text over buttons/panels is redrawn after rebuilding the
+    background (the letters' mask comes from the difference to the local background, from the
+    panel color, or from the white outline when the background is a photo); icons next to the text
+    stay intact. Sprites of one group (a menu's items, a glyph set) share one style: the most
+    common one or, on a tie, the one with the least error over the whole group, glow included
+    (digits of one set all get the same shadow). The result doesn't depend on the process order.
+    Texts with button icons and highlighted words (tutorial explanations, game tips) or aligned
+    line by line are cut into runs by `tools/uitext/segment.py` from the transcription in
+    `tools/uitext/segments.tsv` (`[]` icon, `{}` red or yellow highlight). Running text (tutorial,
+    tips, missions) uses only the regular font; the yards of the 3D view and the digits of each
+    hole's intro use the style of the top view's (`STYLE_LIKE` in build.py). Large words built
+    letter by letter (SUCCESS, BIRDIE, WATER HAZARD...) have one label per letter. The ground words
+    under the ball (Fairway, Rough, Green...), the result letters and the notices "Approach Shot",
+    "Your Turn" and "For BIRDIE/EAGLE/WIN" have the gradient, the white outline and the dark one
+    measured on the sprite itself (`GLOSSY`; the notices each with their own colors: `SOLO`); the
+    scoreboard's stroke digits are hollow, outline only (`HOLLOW`: a transparent fill that cuts
+    the outlines, in the shader too); the digits of `score_01`/`score_02` (scoreboard) are listed
+    in `sprites.tsv`.
+    In the game the GPU draws these texts: glyph distance fields built once from the font and a
+    shader that enlarges the atlas and composes letters, outlines, glow and gradient (1–10 ms per
+    atlas; the CPU path stays as reference and fallback, `PANGYA_UITEXT_CPU=1`). Only above 1x.
 - [x] Stage 6 — ad hoc over LiveKit. `runtime/net.c` emulates sceNetAdhocctl/sceNetAdhoc (groups,
   scan, peer list, PDP) on top of messages between the copies of the game: each announces its
   group and nickname (HELLO), a scan asks everyone (PROBE), and PDP datagrams carry the sender's

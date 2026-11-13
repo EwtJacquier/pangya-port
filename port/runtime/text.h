@@ -1,5 +1,7 @@
-// Text drawn again at high resolution (optional: without runtime/text.c, runtime/text_none.c
-// leaves the game's own text, which the texture pack may have upscaled).
+// Text drawn again at high resolution: the strings the game renders into textures with its own
+// bitmap font, and the words baked into its UI atlases, are drawn again with a vector font at the
+// render scale (see mods/font.c and runtime/text.c). Without runtime/text.c, runtime/text_none.c
+// leaves the game's own text, which the texture pack may have upscaled.
 #pragma once
 #include <stdbool.h>
 #include <stddef.h>
@@ -18,13 +20,21 @@ typedef struct {
 void text_register(uint32_t buf, int stride, int tex_w, int tex_h, int cap_top, int baseline, const TextGlyph *g, int n);
 
 // The strip at addr drawn k times larger, or NULL. Valid until the next call.
+// (if the game registered it and its pixels are still the ones it rendered, and this vector text
+// is on)
 const uint32_t *text_hires(uint32_t addr, const uint8_t *src, size_t bytes, int w, int h, int stride, int k);
 
 // A UI atlas with text (px, w x h texels) drawn k times larger, or NULL. Valid until the next call.
+// UI atlases with baked text (generated/ui_text.spec, from tools/uitext/build.py): if the decoded
+// texture px is one of them, the atlas with its text sprites drawn again as vector text with their
+// outlines; NULL otherwise (and always while the UI vector text is off, the default: the texture
+// pack has the atlases upscaled).
 const uint32_t *uitext_hires(const uint32_t *px, int w, int h, int k);
 
 // The same atlas over its upscaled picture from the texture pack (hd: pw x ph pixels for the
 // iw x ih texels of the w x h texture), k times larger, or NULL. Valid until the next call.
+// The pack's art with the words drawn over it, when the HD textures and the UI vector text are
+// both on.
 const uint32_t *uitext_over(const uint32_t *px, int w, int h, int k, const uint32_t *hd, int pw, int ph, int iw, int ih);
 
 // The same drawn by the GPU straight into the GL texture tex (allocated w*k x h*k; left bound to

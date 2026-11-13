@@ -1,0 +1,51 @@
+# Source of the boxes of texts that mix colors and button icons (or are aligned line by line) in
+# labels.tsv: python3 -I tools/uitext/segment.py ISO tools/uitext/segments.tsv
+# "|" between lines, [] an icon, {...} highlighted text: red in the tutorial, yellow in the tips.
+tutorial_text_chapter_01	ch1_text08_Z	0,326,256,27	Ok, ok!|I was just kidding...
+tutorial_text_chapter_01	ch1_text03_Z	0,117,256,67	Press [] for the overhead view.|Press [] to move left and right, and|press [] while holding down []|to zoom in/out.
+tutorial_text_chapter_01	ch1_text02_Z	0,59,256,57	This interface shows you|the club you're currently using.|You can choose any of the 14 clubs|by pressing [] []
+tutorial_text_chapter_02	ch2_text05_Z	0,147,256,44	Finally, press [] once more as close|to the white line as possible|to take a shot.
+tutorial_text_chapter_02	ch2_text04_Z	0,103,256,43	Then, press [] again to determine|the power of your swing and the|distance you want to hit the ball.
+tutorial_text_chapter_02	ch2_text03_Z	0,71,256,31	First, press [] to activate|the Power Gauge.
+tutorial_text_chapter_03	ch3_text03_Z	0,82,256,51	Ok. Hit the ball to the target area.|Don't forget that {only 85% of the}|{power} will be applied to the ball|because it's in the bunker.
+tutorial_text_chapter_04	ch4_text10_Z	0,267,256,26	Really?|Thanks!
+tutorial_text_chapter_04	ch4_text05_Z	0,129,256,16	Then, press [] to use an item.
+tutorial_text_chapter_04	ch4_text04_Z	0,100,256,28	Press [] to|open the Item Slot.
+tutorial_text_chapter_05	ch5_text10_Z	0,469,256,27	Hehe.|Really? Thanks.
+tutorial_text_chapter_05	ch5_text06_02_Z	1,352,144,33	{The ball will tilt to the left}|on a left lie.
+tutorial_text_chapter_05	ch5_text06_01_Z	1,318,174,33	{Dots leaning toward}|{the left} indicate|a {left lie.}
+tutorial_text_chapter_05	ch5_text05_02_Z	1,284,151,33	The ball will {tilt to the right}|on a right lie.
+tutorial_text_chapter_05	ch5_text05_01_Z	1,238,167,45	When the dots|{lean toward the right},|that means there is|a {right lie}.
+tutorial_text_chapter_05	ch5_text04_02_Z	1,203,133,34	{The ball rolls out a bit}|{shorter} than intended on|an upward slope.
+tutorial_text_chapter_05	ch5_text04_01_Z	1,168,145,34	If the dots lean toward|the bottom, that means an|upward slope is up ahead.
+tutorial_text_chapter_05	ch5_text03_02_Z	1,133,154,34	{The ball rolls out a bit further}|than intended on a|downward slope.
+tutorial_text_chapter_05	ch5_text03_01_Z	1,98,164,34	If the dots lean {toward}|{the top}, that means a|{downward slope} is up ahead.
+tutorial_text_chapter_05	ch5_text02_Z	0,36,256,61	Can you see the dots placed|on the left side of each rectangle?|This means that there is a left lie.|{In this situation,}|{aim to the right a little bit.}
+tutorial_text_chapter_06	ch6_text06_Z	0,155,256,57	When one yellow block of the gauge gets|filled and becomes red, you can press []|to take a Power Shot. The gauge will go|down by one block when you do that.
+tutorial_text_chapter_06	ch6_text04_Z	0,84,256,42	This shows you how many shots you|have taken and your score. Press []|toview the details of your score.
+tutorial_text_chapter_07	ch7_text07_Z	0,245,256,49	You failed. Lower the Hit Point with|the analog stick and press [] when the|Power Gauge comes back. Try again.
+tutorial_text_chapter_07	ch7_text04_Z	0,114,256,74	After the Power Gauge is activated,|press [] once as the Power Gauge|passes the halfway mark on its way|back, then you must hit a perfect|Pangya Shot for the Backspin to occur.
+tutorial_text_chapter_08	ch8_text07_Z	0,204,256,50	Oh, no! You missed it. Don't forget to|adjust the Hit Point, press [] once|and hit a perfect Pangya Shot.
+tutorial_text_chapter_08	ch8_text04_Z	0,99,256,63	Next, activate the Power Gauge and|when it passes the halfway mark,|{press} [] {once and hit a perfect}|{Pangya Shot to hit a Topspin Shot}.
+tutorial_text_chapter_08	ch8_text03_Z	0,56,256,42	This circle in the center is the Hit Point.|{Use the analog stick to raise}|{this Hit Point to where you want it to be}.
+tutorial_text_chapter_09	ch9_text10_Z	0,345,256,42	Meh... missed it... Pressing [] []|when the Power Gauge comes back is|important. Try again.
+tutorial_text_chapter_09	ch9_text09_Z	0,302,256,42	Ok, you try it now. Don't forget to press|[] [] atthe right time when the|Power Gauge comes back.
+tutorial_text_chapter_09	ch9_text06_Z	0,157,256,58	In the Power Shot mode, start the shot and|when the Power Gauge passes the halfway|mark on its way back, press [] [] and hit|a perfect Pangya Shot to hit a Tomahawk Shot.
+tutorial_text_chapter_09	ch9_text05_Z	0,112,256,44	The Tomahawk Shot is a technique|you can use in the Power Shot mode.|Press [] to activate the Power Shot mode.
+tutorial_text_chapter_10	ch10_text11_Z	0,289,256,42	So I have to {press the directional buttons}|{in the direction of the Hit Point and hit a}|{Pangya Shot}, right? Ok, I'll get it this time.
+tutorial_text_chapter_10	ch10_text08_Z	0,215,256,48	then {press the left or right button towards}|{the Hit Point} until the Power Gauge comes|back after passing the halfway mark|and hit a Pangya Shot.
+tutorial_text_chapter_11	ch11_text10_Z	0,260,256,42	You missed!|Press [] [] after the Power Gauge|passes the halfway mark on its way back!
+tutorial_text_chapter_11	ch11_text09_Z	0,217,256,42	Now you try it!|Don't forget to press [] []|when the Power Gauge comes back!
+tutorial_text_chapter_11	ch11_text04_Z	0,69,256,53	After activating the Power Gauge,|press [] [] and then take a shot|when the Power Gauge comes|back for a Cobra Shot!
+tutorial_text_chapter_12	ch12_text10_Z	0,312,256,42	Oh, no.. Try again.|Don't forget to press [] []|when the Power Gauge comes back.
+tutorial_text_chapter_12	ch12_text06_Z	0,155,256,57	Whe-when the Power Gauge|comes back,|press [] [] and then|take a shot.
+tutorial_text_chapter_12	ch12_text04_Z	0,84,256,42	Good!|That's the spirit!|Let's start then!
+pangyashop_2	detail_off_A	225,238,42,63	Power|Control|Accuracy|Spin|Curve
+pangyashop_2	detail_on_A	268,238,50,63	Power|Control|Accuracy|Spin|Curve
+tip	tip_txt_1	1,1,207,12	There's a {strong wind}. Be careful..
+tip	tip_txt_2	1,14,244,12	Hit the ball {harder} than usual in the {bunker.}
+tip	tip_txt_3	1,27,250,12	Hit the ball {harder} than usual on an {upward slope.}
+tip	tip_txt_4	1,40,254,12	Hit the ball {lighter} than usual on a {downward slope.}
+tip	tip_txt_5	1,53,244,12	You can't use this club on this {ground type.}
+tip	tip_txt_6	1,66,253,12	You can use a {Power Shot} by pressing [].
+tip	tip_txt_7	1,79,245,12	Press [] to make the {character transparent.}

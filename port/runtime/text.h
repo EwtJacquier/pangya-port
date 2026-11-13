@@ -23,6 +23,10 @@ const uint32_t *text_hires(uint32_t addr, const uint8_t *src, size_t bytes, int 
 // A UI atlas with text (px, w x h texels) drawn k times larger, or NULL. Valid until the next call.
 const uint32_t *uitext_hires(const uint32_t *px, int w, int h, int k);
 
+// The same atlas over its upscaled picture from the texture pack (hd: pw x ph pixels for the
+// iw x ih texels of the w x h texture), k times larger, or NULL. Valid until the next call.
+const uint32_t *uitext_over(const uint32_t *px, int w, int h, int k, const uint32_t *hd, int pw, int ph, int iw, int ih);
+
 // The same drawn by the GPU straight into the GL texture tex (allocated w*k x h*k; left bound to
 // texture unit 0); false if it isn't drawn. Changes GL state (the caller re-applies its own).
 bool uitext_hires_gl(const uint32_t *px, int w, int h, int k, unsigned tex);

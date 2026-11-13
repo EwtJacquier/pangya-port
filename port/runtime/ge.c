@@ -91,6 +91,7 @@ typedef struct {
 	float scale;       // texels per GE texel: the render scale for redrawn text (text.c), a
 	                   // replacement's own scale (texpack.c), 1 for the texture as the GE has it
 	int pack1;         // a replacement still on its way (web): its index + 1, else 0
+	uint32_t *ui_orig; // ... for a UI atlas with words: its pixels as the game has them (uitext_over)
 	bool mips;         // a replacement with its mipmaps (sampled smoothly when it shows smaller)
 	uint64_t pack_frame, changed_frame;
 	uint8_t changes;   // contents replaced in consecutive frames (movies): not looked up
@@ -651,12 +652,23 @@ static void pack_poll(TexEntry *e) {
 	bool failed;
 	uint32_t *px = texpack_load(e->pack1 - 1, &pw, &ph, &iw, &ih, &failed);
 	if (!px) {
-		if (failed) e->pack1 = 0;
+		if (failed) e->pack1 = 0, free(e->ui_orig), e->ui_orig = NULL;
 		return;
 	}
 	uint64_t t1 = rt_now_us();
 	batch_flush();  // queued draws still show the original
-	pack_upload(e, px, pw, ph, iw, ih, e->w, e->h);
+	const uint32_t *over = e->ui_orig ? uitext_over(e->ui_orig, e->w, e->h, rs, px, pw, ph, iw, ih) : NULL;
+	if (over) {  // a UI atlas: the picture with text.h's words over it
+		glBindTexture(GL_TEXTURE_2D, e->tex);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, e->w * rs, e->h * rs, 0, GL_RGBA, GL_UNSIGNED_BYTE, over);
+		gl_invalidate();
+		e->scale = (float)rs;
+		e->mips = false;
+	} else {  // (text.h stopped drawing the atlas meanwhile: the picture as it is)
+		pack_upload(e, px, pw, ph, iw, ih, e->w, e->h);
+	}
+	free(e->ui_orig);
+	e->ui_orig = NULL;
 	free(px);
 	e->pack1 = 0;
 	uint64_t t2 = rt_now_us();
@@ -778,6 +790,8 @@ static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {
 	else slot = lru, slot->changes = 0;
 	slot->changed_frame = frame_no;
 	slot->pack1 = 0;
+	free(slot->ui_orig);
+	slot->ui_orig = NULL;
 	last_slot = (int)(slot - texcache);
 	batch_flush();  // queued draws may use the GL texture about to be (re)filled
 
@@ -902,7 +916,36 @@ static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {
 	if (pack_log < 0) pack_log = getenv("PANGYA_TEXPACK_LOG") != NULL;
 	if (pack_log && slot->changes < 4)
 		rt_log("texpack: upload %016llx %dx%d fmt %d at %08x", (unsigned long long)texpack_key(out, w, w, h), w, h, fmt, addr);
-	int pk = slot->changes < 4 && !(rs > 1 && fmt >= 4 && fmt <= 7 && uitext_claims(out, w, h)) ? texpack_find(out, w, h) : -1;
+	// A UI atlas with words that text.h draws again: with the pack's picture too, the picture with
+	// those words over it (uitext_over), else the redrawn atlas below.
+	bool claimed = rs > 1 && fmt >= 4 && fmt <= 7 && slot->changes < 4 && uitext_claims(out, w, h);
+	int pk = slot->changes < 4 ? texpack_find(out, w, h) : -1;
+	if (pk >= 0 && claimed) {
+		int pw, ph, iw, ih;
+		bool failed;
+		uint32_t *px = texpack_load(pk, &pw, &ph, &iw, &ih, &failed);
+		const uint32_t *over = px ? uitext_over(out, w, h, rs, px, pw, ph, iw, ih) : NULL;
+		free(px);
+		if (over) {
+			if (!slot->tex) glGenTextures(1, &slot->tex);
+			glBindTexture(GL_TEXTURE_2D, slot->tex);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w * rs, h * rs, 0, GL_RGBA, GL_UNSIGNED_BYTE, over);
+			gl_invalidate();
+			free(out);
+			slot->key = key, slot->hash = hash, slot->w = w, slot->h = h;
+			slot->checked = slot->last_use = frame_no;
+			slot->scale = tex_scale = (float)rs;
+			slot->mips = tex_mips = false;
+			return slot->tex;
+		}
+		if (!px && !failed) {  // on its way (web): the redrawn atlas until then
+			slot->pack1 = pk + 1;
+			slot->ui_orig = malloc(sizeof *out * (size_t)w * h);
+			if (slot->ui_orig) memcpy(slot->ui_orig, out, sizeof *out * (size_t)w * h);
+			else slot->pack1 = 0;
+		}
+		pk = -1;
+	}
 	if (pk >= 0) {
 		int pw, ph, iw, ih;
 		bool failed;
@@ -1859,7 +1902,11 @@ void ge_command(uint32_t cmd, uint32_t data, uint32_t addr) {
 // ---------------------------------------------------------------------------------------------
 // Every texture is looked up and drawn again (the texture pack or the text drawing changed).
 void ge_forget_textures(void) {
-	for (int i = 0; i < MAX_TEX; i++) texcache[i].hash = 0, texcache[i].checked = 0, texcache[i].pack1 = 0;
+	for (int i = 0; i < MAX_TEX; i++) {
+		texcache[i].hash = 0, texcache[i].checked = 0, texcache[i].pack1 = 0;
+		free(texcache[i].ui_orig);
+		texcache[i].ui_orig = NULL;
+	}
 }
 
 // Returns the texture to show for the displayed framebuffer address (an FBO if the GE rendered

@@ -456,8 +456,10 @@ if (!window.pangyaMobile) {
   function render() {
     const focusedIdx = [...menu.querySelectorAll('button')].indexOf(document.activeElement);
     document.getElementById('fs').textContent = document.fullscreenElement ? 'Leave' : 'Enter';
-    for (const [id, on] of [['hd', settings.hd]]) {
+    const toggles = [['hd', settings.hd]];
+    for (const [id, on] of toggles) {
       const b = document.getElementById(id);
+      if (!b) continue;
       b.textContent = on ? 'On' : 'Off';
       b.setAttribute('aria-pressed', String(on));
     }

@@ -61,12 +61,19 @@ static uint32_t doc_player(uint32_t doc, uint32_t i) { return M32(doc + 0xa8) + 
 enum { MSG_PROFILE = 1 };
 typedef struct {
 	uint8_t index, pad[3];             // room index
-	uint32_t chr, ball, caddie, clubs;  // gamedata +0xe82c, +0xe824, +0xe828, +0x5ac
+	uint32_t chr, set, ball, caddie;   // gamedata +0xe82c, +0xe824 the club set ("m_diClubSet"), +0xe828 the ball
+	                                   // ("m_diBall"), +0x5ac (the 0x1c000000 kind: the caddie, it seems)
 	uint32_t stats[5];                 // gamedata +0xe8ec.. (FUN_0889b604 order)
 	uint32_t parts[24];                // the costume: gamedata + chr * 0x8e4 + 0xaf8
+	uint32_t items[10];                // the items brought to the round (see "items" below)
 } Profile;
 static Profile profiles[4];
 static bool have_profile[4];
+// The items a player brings to a round: the equipment screen puts this copy's player's in player
+// 0's list (G + 0x41b, ten ids; FUN_08a1865c), where a round of one player per copy takes them.
+#define ITEM_SLOTS 0x41bu
+static uint32_t my_items[10];
+static bool items_given[4];  // each player's list set for the round (once: using one takes it out)
 
 static void take_profiles(void) {
 	Profile p;
@@ -78,11 +85,12 @@ static void send_profile(void) {
 	uint32_t gd = M32(GAMEDATA);
 	Profile me = {.index = (uint8_t)my_index()};
 	me.chr = M32(gd + 0xe82c);
-	me.ball = M32(gd + 0xe824);
-	me.caddie = M32(gd + 0xe828);
-	me.clubs = M32(gd + 0x5ac);
+	me.set = M32(gd + 0xe824);
+	me.ball = M32(gd + 0xe828);
+	me.caddie = M32(gd + 0x5ac);
 	for (int i = 0; i < 5; i++) me.stats[i] = M32(gd + 0xe8ec + 4 * (uint32_t)i);
 	for (int i = 0; i < 24; i++) me.parts[i] = M32(gd + me.chr * 0x8e4 + 0xaf8 + 4 * (uint32_t)i);
+	memcpy(me.items, my_items, sizeof me.items);
 	net_mod_send(MSG_PROFILE, &me, sizeof me);
 }
 
@@ -93,8 +101,17 @@ void f_089b9b1c(CPU *c) {
 	f_089b9b1c_orig(c);
 	const char *tc = getenv("PANGYA_TEST_CHAR");  // tests: this copy plays another character
 	if (tc && *tc) M32(M32(GAMEDATA) + 0xe82c) = (uint32_t)atoi(tc);
+	const char *tb = getenv("PANGYA_TEST_BALL");  // tests: this copy's player has another ball
+	if (tb && *tb) M32(M32(GAMEDATA) + 0xe828) = (uint32_t)atoi(tb);
 	uint32_t g = golf();
 	if (!turns() || !g || (M8(g + GOLF_TYPE) != 5 && M8(g + GOLF_TYPE) != 8)) return;
+	const char *ti = getenv("PANGYA_TEST_ITEMS");  // tests: this copy's player brings these items (hex ids)
+	for (int i = 0; ti && *ti && i < 10; i++) {
+		M32(g + ITEM_SLOTS + 4 * (uint32_t)i) = (uint32_t)strtoul(ti, (char **)&ti, 16);
+		if (*ti == ',') ti++;
+	}
+	for (int i = 0; i < 10; i++) my_items[i] = M32(g + ITEM_SLOTS + 4 * (uint32_t)i);
+	memset(items_given, 0, sizeof items_given);
 	static uint64_t next;
 	uint64_t now = rt_now_us();
 	if (now >= next) {
@@ -105,7 +122,18 @@ void f_089b9b1c(CPU *c) {
 }
 
 static void log_profiles(void) {
-	uint32_t n = M32(M32(GAMEDATA) + ROOM + 0x10);
+	uint32_t n = M32(M32(GAMEDATA) + ROOM + 0x10), gd = M32(GAMEDATA);
+	rt_log("turns: this copy's player %u: character %u, ball %x, items %08x %08x %08x %08x (saved list %08x %08x %08x %08x)", my_index(),
+	       M32(gd + 0xe82c), M32(gd + 0xe828), my_items[0], my_items[1], my_items[2], my_items[3], M32(gd + 0xb408), M32(gd + 0xb40c),
+	       M32(gd + 0xb410), M32(gd + 0xb414));
+	if (env_on("PANGYA_NET_TRACE")) {  // the items the player owns (id, count: 12 bytes each from gamedata+0xb364)
+		char line[400];
+		int k = 0;
+		for (uint32_t e = 0; e < 14 && k < 360; e++)
+			if (M32(gd + 0xb364 + e * 12)) k += snprintf(line + k, sizeof line - (size_t)k, " %08x x%d", M32(gd + 0xb364 + e * 12), (int)M32(gd + 0xb368 + e * 12));
+		line[k] = 0;
+		rt_log("turns: this copy's player owns:%s", k ? line : " nothing");
+	}
 	for (uint32_t i = 0; i < n && i < 4; i++) {
 		if (i == my_index()) continue;
 		if (!have_profile[i]) {
@@ -113,8 +141,8 @@ static void log_profiles(void) {
 			continue;
 		}
 		const Profile *p = &profiles[i];
-		rt_log("turns: player %u plays character %u (ball %x, caddie %x, clubs %x, stats %u %u %u %u %u)", i, p->chr, p->ball,
-		       p->caddie, p->clubs, p->stats[0], p->stats[1], p->stats[2], p->stats[3], p->stats[4]);
+		rt_log("turns: player %u plays character %u (club set %x, ball %x, caddie %x, stats %u %u %u %u %u)", i, p->chr, p->set,
+		       p->ball, p->caddie, p->stats[0], p->stats[1], p->stats[2], p->stats[3], p->stats[4]);
 	}
 }
 
@@ -123,9 +151,9 @@ static void put_opponent(const Profile *p) {
 	uint32_t gd = M32(GAMEDATA);
 	M8(gd + 0x7d4) = (uint8_t)p->chr;
 	for (int i = 0; i < 24; i++) M32(gd + 0x7d8 + 4 * (uint32_t)i) = p->parts[i];
-	M8(gd + 0x838) = (uint8_t)p->ball;
-	M8(gd + 0x839) = (uint8_t)p->caddie;
-	M8(gd + 0x83a) = (uint8_t)p->clubs;
+	M8(gd + 0x838) = (uint8_t)p->set;
+	M8(gd + 0x839) = (uint8_t)p->ball;
+	M8(gd + 0x83a) = (uint8_t)p->caddie;
 	M8(gd + 0x83b) = (uint8_t)p->stats[0];
 	M8(gd + 0x83d) = (uint8_t)p->stats[1];
 	M8(gd + 0x83c) = (uint8_t)p->stats[2];
@@ -354,16 +382,22 @@ void f_088b0930(CPU *c) {
 	uint32_t g = golf(), i = A1 & 0xff;
 	bool other = setup_type == 8 && i < 4 && i != my_index() && have_profile[i];
 	if (other) put_opponent(&profiles[i]);
+	// Each player's items in their own list (this copy's player's were in player 0's), once a round.
+	if (setup_type == 8 && i < 4 && !items_given[i]) {
+		items_given[i] = true;
+		const uint32_t *it = i == my_index() ? my_items : have_profile[i] ? profiles[i].items : NULL;
+		for (uint32_t k = 0; k < 10; k++) M32(g + i * 0x270 + ITEM_SLOTS + 4 * k) = it ? it[k] : 0;
+	}
 	if (setup_type == 8) M8(g + GOLF_TYPE) = 8;
 	f_088b0930_orig(c);
 	g = golf();
 	if (setup_type == 8) M8(g + GOLF_TYPE) = 5;
-	if (other) {  // the full item ids (the room data had a byte each) and the club set (it had none)
+	if (other) {  // the full item ids (the room data had a byte each)
 		uint32_t e = g + i * 0x270;
-		M32(e + 0x413) = M32(e + 0x50a) = profiles[i].ball | 0x10000000u;
-		M32(e + 0x417) = profiles[i].caddie | 0x14000000u;
+		M32(e + 0x413) = M32(e + 0x50a) = profiles[i].set | 0x10000000u;
+		M32(e + 0x417) = profiles[i].ball | 0x14000000u;
 		M32(e + 0x4df) = i;
-		M32(e + 0x4e3) = profiles[i].clubs | 0x1c000000u;
+		M32(e + 0x4e3) = profiles[i].caddie | 0x1c000000u;
 	}
 }
 
@@ -432,6 +466,8 @@ void f_088b5dbc(CPU *c) {
 				memcpy(t, MP(doc_player(doc, 0)), sizeof t);
 				memcpy(MP(doc_player(doc, 0)), MP(doc_player(doc, me)), sizeof t);
 				memcpy(MP(doc_player(doc, me)), t, sizeof t);
+				// and the items left: the round's end keeps player 0's for the next (FUN_088ac3c0)
+				swap_mem(g + ITEM_SLOTS, g + me * 0x270 + ITEM_SLOTS, 0x28);
 			}
 			M8(doc + 0x161) = 0;
 		}
@@ -497,15 +533,38 @@ void f_0890d788(CPU *c) {
 // player 0: the power-shot sign on the gauge shows in player 0's turn and from player 0's power,
 // the map view moves only then (doc+0x161 == 0, FUN_088fb284(0)). On the second player's copy the
 // sign showed in the other player's turn. In turns the HUD draws as if this copy's player were
-// player 0: its turn (doc+0x161) and the players it reads (FUN_088fb284) swap 0 and this copy's
-// player, and so does the one thing it reads by the turn without that getter, the player's in-round
-// byte G + 0x270 * player + 0x50a (the width of the gauge's mark).
+// player 0: its turn (doc+0x161) and the players it reads swap 0 and this copy's player (the round's
+// player getter FUN_0889a22c, which all its parts use: FUN_088fb284, the pang counter's
+// FUN_0896567c(0), the wind's FUN_0894ec54 for Silent Wind...), and so do the things it reads by the
+// turn without a getter: each player's things in the round, G + 0x270 * player from +0x2a9 (the
+// name, the club set at +0x413 and +0x50a, the ball at +0x417 that the ball's picture, FUN_08978a8c,
+// takes every frame: the second player's copy showed each player's ball in the other one's turn),
+// and the HUD's own pictures of each player's ball and club set (+0x60 and +0x68, and the spin
+// circle's ball, +0x1c's +0x1c: one per player, made with the round from each player's things and
+// drawn by the turn: the second player's copy showed each player's ball in the other one's turn).
 static uint32_t hud_me;  // while the HUD draws in turns, on the copy of a player other than 0
 static uint32_t hud_swap(uint32_t i) { return i == 0 ? hud_me : i == hud_me ? 0 : i; }
+#define PLAYER_THINGS 0x2a9u  // G + 0x270 * player: the first of a player's things in the round
+static void swap_things(uint32_t g, uint32_t me) {
+	uint8_t t[0x270];
+	memcpy(t, MP(g + PLAYER_THINGS), sizeof t);
+	memmove(MP(g + PLAYER_THINGS), MP(g + PLAYER_THINGS + me * 0x270), sizeof t);
+	memcpy(MP(g + PLAYER_THINGS + me * 0x270), t, sizeof t);
+}
+static void swap_words(uint32_t at, uint32_t me) {
+	uint32_t t = M32(at);
+	M32(at) = M32(at + 4 * me), M32(at + 4 * me) = t;
+}
+static void hud_swap_pictures(uint32_t hud, uint32_t me) {
+	swap_words(hud + 0x60, me);  // the ball and the club set by the gauge
+	swap_words(hud + 0x68, me);
+	uint32_t circle = M32(hud + 0x1c);  // the ball in the spin circle (FUN_08978e34): one picture per player at +0x1c
+	if (circle && rt_valid(circle, 0x30)) swap_words(circle + 0x1c, me);
+}
 
-void f_088fb284(CPU *c) {
-	if (hud_me) A0 = hud_swap(A0 & 0xff);
-	f_088fb284_orig(c);
+void f_0889a22c(CPU *c) {
+	if (hud_me) A1 = hud_swap(A1 & 0xff);
+	f_0889a22c_orig(c);
 }
 
 void f_088fe81c(CPU *c) {
@@ -514,12 +573,15 @@ void f_088fe81c(CPU *c) {
 		f_088fe81c_orig(c);
 		return;
 	}
-	uint8_t turn = M8(doc + 0x161), b = M8(g + 0x50a);
+	uint8_t turn = M8(doc + 0x161);
+	uint32_t hud = A0;
 	hud_me = me;
 	M8(doc + 0x161) = (uint8_t)hud_swap(turn);
-	M8(g + 0x50a) = M8(g + me * 0x270 + 0x50a), M8(g + me * 0x270 + 0x50a) = b;
+	swap_things(g, me);
+	if (hud && me < TURN_PLAYERS) hud_swap_pictures(hud, me);
 	f_088fe81c_orig(c);
-	b = M8(g + 0x50a), M8(g + 0x50a) = M8(g + me * 0x270 + 0x50a), M8(g + me * 0x270 + 0x50a) = b;
+	if (hud && me < TURN_PLAYERS) hud_swap_pictures(hud, me);
+	swap_things(g, me);
 	M8(doc + 0x161) = turn;
 	hud_me = 0;
 }
@@ -538,6 +600,7 @@ void f_08906e40(CPU *c) {
 	uint32_t part = A0, me = hud_me, n = M8(doc + 0xc1), kept[MAX_PLAYERS];
 	uint8_t shown = M8(doc + 0x161), turn = me ? (uint8_t)hud_swap(shown) : shown;
 	hud_me = 0;
+	if (me) swap_things(golf(), me);  // the cards read the players as they are
 	M8(doc + 0x161) = turn;
 	if (n > MAX_PLAYERS) n = MAX_PLAYERS;
 	for (uint32_t i = 0; i < n; i++)
@@ -554,7 +617,30 @@ void f_08906e40(CPU *c) {
 	for (uint32_t i = 0; i < n; i++)
 		if (i != turn) M32(doc_player(doc, i)) = kept[i];
 	M8(doc + 0x161) = shown;
+	if (me) swap_things(golf(), me);
 	hud_me = me;
+}
+
+// The name on a card (FUN_0896b39c(x, y, its text, player), floats in the FPU registers): player 0's
+// is this copy's nickname (gamedata+0xadb), the others' their character's ("mingty"), as against the
+// computer. In turns every card shows that player's own nickname, the one the room's list shows (the
+// player's record, G+0xfa4, +4).
+#define MY_NAME 0xadbu
+void f_0896b39c(CPU *c) {
+	uint32_t g = golf(), doc = g && M8(g + GOLF_TYPE) == 8 ? M32(g + 0x143c) : 0, i = A1 & 0xff, gd = M32(GAMEDATA);
+	uint32_t rb = g ? M32(g + 0xfa4) : 0, re = g ? M32(g + 0xfa8) : 0;
+	if (!doc || !gd || !rb || re <= rb || i >= (re - rb) / 0x1d0 || !M8(rb + i * 0x1d0 + 4)) {
+		f_0896b39c_orig(c);
+		return;
+	}
+	uint8_t kept[24];
+	memcpy(kept, MP(gd + MY_NAME), sizeof kept);
+	char *name = (char *)MP(gd + MY_NAME);
+	strncpy(name, rt_str(rb + i * 0x1d0 + 4), sizeof kept - 1);
+	name[sizeof kept - 1] = 0;
+	A1 = 0;
+	f_0896b39c_orig(c);
+	memcpy(MP(gd + MY_NAME), kept, sizeof kept);
 }
 
 // ---- the distance to the hole --------------------------------------------------------------
@@ -657,7 +743,7 @@ void f_088be948(CPU *c) {
 	}
 	rule = A0;
 	uint32_t turn = M8(doc + 0x161), me = my_index(), hole = M8(doc + 0x156);
-	rt_log("turns: player %u's shot %u on hole %u", turn, *strokes_of(doc, turn), hole);
+	rt_log("turns: player %u's shot %u on hole %u (item %08x)", turn, *strokes_of(doc, turn), hole, M32(doc_player(doc, turn) + 0x98));
 	if (turn == me) {
 		Shot m = {.player = (uint8_t)me, .hole = (uint8_t)hole, .stroke = *strokes_of(doc, me), .rng = M32(RNG_STATE)};
 		m.dir = have_dir ? my_dir : 0;
@@ -721,6 +807,168 @@ void f_088ed920(CPU *c) {
 		}
 	}
 	f_088ed920_orig(c);
+}
+
+// ---- items -------------------------------------------------------------------------------------
+// An item (X on it in the item window, FUN_0890b6ac) takes effect through FUN_0890afb4(window,
+// player, item, 1, a random number): it leaves the player's list (G + 0x270 * player + 0x41b, the
+// count at the round player's +0x94), becomes the item of the player's next shot (+0x98: more power,
+// no wind...), plays its effect on the character and shows on the HUD; one may fail (the random
+// number). With 0 instead of 1 the item is found by its id in that list: the way another player's
+// item came in from the server of the network game this one was made for. Here nothing sent it,
+// and the other copies never saw it. The player's copy sends the item and the random number; the
+// others take it in that way once they stand in that player's turn for that stroke, before its shot.
+enum { MSG_ITEM = 5 };
+typedef struct {
+	uint8_t player, hole, stroke, pad;
+	uint32_t item, rng;
+} Item;
+static Item items_in[8];
+static int n_items;
+static uint32_t item_window;  // the item window (FUN_0890a92c's a0, its update every frame)
+static bool applying_item;
+
+void f_0890a92c(CPU *c) {
+	item_window = A0;
+	f_0890a92c_orig(c);
+}
+
+void f_0890afb4(CPU *c) {
+	uint32_t g = golf(), doc = g && M8(g + GOLF_TYPE) == 8 ? M32(g + 0x143c) : 0;
+	uint32_t player = A1 & 0xff, item = A2, from_window = A3 & 0xff, rng = A4;
+	// the stroke it comes before, as it is now: an item may change it (the Mulligan Rose takes the shot back)
+	uint8_t stroke = doc && M32(doc + 0xa8) && player < M8(doc + 0xc1) ? *strokes_of(doc, player) : 0;
+	f_0890afb4_orig(c);
+	if (!doc || !M32(doc + 0xa8) || applying_item || !from_window || player != my_index() || c->r[2] != 1) return;
+	Item m = {.player = (uint8_t)player, .hole = M8(doc + 0x156), .stroke = stroke, .item = item, .rng = rng};
+	net_mod_send(MSG_ITEM, &m, sizeof m);
+	rt_log("turns: player %u uses item %08x before shot %u", player, item, m.stroke);
+}
+
+// Whether an item can be used now (FUN_0890c654, a0 the window, a1 the item): the Mulligan Rose
+// asks for player 0's strokes on the hole, as against the computer. In turns, the player whose turn it is.
+void f_0890c654(CPU *c) {
+	uint32_t g = golf(), doc = g && M8(g + GOLF_TYPE) == 8 ? M32(g + 0x143c) : 0, turn = doc ? M8(doc + 0x161) : 0;
+	if (!doc || !turn || hud_me) {
+		f_0890c654_orig(c);
+		return;
+	}
+	hud_me = turn;  // FUN_0889a22c: player 0 is the turn's
+	f_0890c654_orig(c);
+	hud_me = 0;
+}
+
+static void apply_item(CPU *c, uint32_t doc, const Item *m) {
+	uint32_t g = golf(), slots = g + m->player * 0x270u + ITEM_SLOTS, p = doc_player(doc, m->player), n = M8(p + 0x94);
+	uint32_t k = 0;
+	while (k < n && k < 10 && M32(slots + 4 * k) != m->item) k++;
+	if (k == n && n < 10) {  // not in this copy's list of that player's items: it goes there first
+		M32(slots + 4 * n) = m->item, M8(p + 0x94) = (uint8_t)(n + 1);
+		rt_log("turns: player %u's item %08x was not in their list here (%u items)", m->player, m->item, n);
+	}
+	CPU saved = *c;
+	c->r[4] = item_window, c->r[5] = m->player, c->r[6] = m->item, c->r[7] = 0, c->r[8] = m->rng, c->r[31] = 0;
+	applying_item = true;
+	rt_call(c, 0x0890afb4u);
+	applying_item = false;
+	uint32_t ok = c->r[2];
+	*c = saved;
+	rt_log("turns: player %u's item %08x before shot %u %s", m->player, m->item, m->stroke, ok == 1 ? "taken in" : "NOT taken in");
+}
+
+// The items the others used, in order, each once this copy stands in that player's turn for that
+// stroke (before the shot: deliver_shots asks for them first).
+static void deliver_items(CPU *c, uint32_t doc, uint32_t mode, uint32_t turn, uint32_t me) {
+	Item m;
+	while (net_mod_recv(MSG_ITEM, NULL, &m, sizeof m) == (int)sizeof m)
+		if (m.player != me && m.player < MAX_PLAYERS && n_items < (int)(sizeof items_in / sizeof items_in[0])) items_in[n_items++] = m;
+	uint32_t hole = M8(doc + 0x156);
+	bool standing = mode == MODE_STAND || mode == MODE_READY || mode == MODE_GAUGE;
+	while (n_items) {
+		const Item *h = &items_in[0];
+		bool old = hole_place(h->hole) < hole_place(hole) ||
+		           (h->hole == hole && h->player < M8(doc + 0xc1) && *strokes_of(doc, h->player) > h->stroke);
+		if (!old) {
+			if (h->hole != hole || h->player != turn || *strokes_of(doc, turn) != h->stroke || !standing || !item_window) return;
+			apply_item(c, doc, h);
+		} else {
+			rt_log("turns: player %u's item %08x before shot %u on hole %u dropped (too late here)", h->player, h->item, h->stroke, h->hole);
+		}
+		memmove(&items_in[0], &items_in[1], sizeof items_in[0] * (size_t)(n_items - 1));
+		n_items--;
+	}
+}
+
+// The Mulligan Rose (GolfRule message 0x8f, "PM_NET_CANCEL_SHOT", in FUN_088a33c4): the ball of
+// the player whose turn it is goes back (FUN_088b35a0), then the player's statistics count it when
+// the turn is player 0's, as against the computer: on the second player's copy the first player's
+// counted, its own never did. Between the ball's going back and the stroke limit's check
+// (FUN_088c61d8) the turn reads as this copy's player's view of it (0 when it is this copy's), the
+// players through the getter as they are (the ball's own setup, before, reads by the real turn).
+static bool cancel_window;
+static uint8_t cancel_turn;
+static uint32_t cancel_doc, cancel_stats, cancel_counts;  // the statistics (rule +0x248): +0x1434/+0x1438 count them
+static void close_cancel(void) {
+	if (!cancel_window) return;
+	M8(cancel_doc + 0x161) = cancel_turn;
+	hud_me = 0, cancel_window = false;
+	uint32_t now = cancel_stats ? M32(cancel_stats + 0x1434) + M32(cancel_stats + 0x1438) : 0;
+	rt_log("turns: player %u's Mulligan %s this copy's statistics", cancel_turn, now != cancel_counts ? "counted in" : "left out of");
+}
+
+void f_088b35a0(CPU *c) {
+	uint32_t rule_of_cancel = A0;
+	f_088b35a0_orig(c);
+	uint32_t g = golf(), doc = g && M8(g + GOLF_TYPE) == 8 ? M32(g + 0x143c) : 0, me = my_index();
+	if (!doc || !M32(doc + 0xa8) || me == 0 || me >= M8(doc + 0xc1) || hud_me || cancel_window) return;
+	cancel_doc = doc, cancel_turn = M8(doc + 0x161), cancel_window = true;
+	cancel_stats = rt_valid(M32(rule_of_cancel + 0x248), 0x1440) ? M32(rule_of_cancel + 0x248) : 0;
+	cancel_counts = cancel_stats ? M32(cancel_stats + 0x1434) + M32(cancel_stats + 0x1438) : 0;
+	hud_me = me;
+	M8(doc + 0x161) = (uint8_t)hud_swap(cancel_turn);
+}
+
+void f_088c61d8(CPU *c) {
+	close_cancel();
+	f_088c61d8_orig(c);
+}
+
+// ---- the club in the player's hands ------------------------------------------------------------
+// The club (the club object, FUN_08949ce0: +0x28 the club, +4 its data) went to the others only with
+// the shot (FUN_088c20ac: FUN_0894c8d8(object, club)): while a player chose another, the others saw
+// the one the game picks by itself. The player's copy sends it whenever it changes in its turn; the
+// others set it the same way while they stand in that turn (the club's update, FUN_0894a748, then
+// changes the character's club and the HUD).
+#define CLUB_OBJ 0x08bb4fecu
+enum { MSG_CLUB = 6 };
+typedef struct {
+	uint8_t player, hole, stroke, club;
+} Club;
+static Club club_in[MAX_PLAYERS];
+static bool has_club[MAX_PLAYERS];
+
+static void clubs(uint32_t doc, uint32_t mode, uint32_t turn, uint32_t me) {
+	bool standing = mode == MODE_STAND || mode == MODE_READY || mode == MODE_GAUGE;
+	uint32_t hole = M8(doc + 0x156);
+	static Club sent;
+	static bool have_sent;
+	if (standing && turn == me && M32(CLUB_OBJ + 4)) {
+		Club m = {.player = (uint8_t)me, .hole = (uint8_t)hole, .stroke = *strokes_of(doc, me), .club = M8(CLUB_OBJ + 0x28)};
+		if (!have_sent || memcmp(&m, &sent, sizeof m)) {
+			net_mod_send(MSG_CLUB, &m, sizeof m);
+			sent = m, have_sent = true;
+		}
+	}
+	Club m;
+	while (net_mod_recv(MSG_CLUB, NULL, &m, sizeof m) == (int)sizeof m)
+		if (m.player < MAX_PLAYERS && m.player != me) club_in[m.player] = m, has_club[m.player] = true;
+	if (turn >= MAX_PLAYERS || turn == me || !has_club[turn] || !standing || !M32(CLUB_OBJ + 4)) return;
+	const Club *h = &club_in[turn];
+	if (h->hole != hole || h->stroke != *strokes_of(doc, turn)) return;
+	has_club[turn] = false;
+	if (M8(CLUB_OBJ + 0x28) == h->club) return;
+	rt_log("turns: player %u holds club %u (this copy had %u)", turn, h->club, M8(CLUB_OBJ + 0x28));
+	rt_call_guest(0x0894c8d8u, CLUB_OBJ, h->club, 0);
 }
 
 // ---- the shots' results ------------------------------------------------------------------------
@@ -797,7 +1045,8 @@ static void next_turn(uint32_t doc, uint32_t mode, uint32_t turn, uint32_t me) {
 // The next of the others' shots goes in once this copy stands ready for it: the same hole, that
 // player's turn, before the shot (standing, or the gauge on the screen). The ball is first put where
 // it rests for the player (the result of their shot before, should it not be in yet).
-static void deliver_shots(uint32_t doc, uint32_t mode, uint32_t turn, uint32_t me) {
+static void deliver_shots(CPU *c, uint32_t doc, uint32_t mode, uint32_t turn, uint32_t me) {
+	deliver_items(c, doc, mode, turn, me);
 	static int lag = -1;  // PANGYA_TEST_LAG=s (tests): a shot waits that long here, as on a copy that fell behind
 	if (lag < 0) lag = getenv("PANGYA_TEST_LAG") ? atoi(getenv("PANGYA_TEST_LAG")) : 0;
 	Shot m;
@@ -927,9 +1176,22 @@ static void autoplay(uint32_t doc, uint32_t mode, uint32_t turn, uint32_t me) {
 	memcpy(&mark, MP(doc + 0xcc + 4), 4);
 	memcpy(&bar, MP(doc + 0xcc + 8), 4);
 	bool tap = false;
+	static int use_items = -1;  // PANGYA_TEST_ITEM=1 (tests): the first item before every shot
+	if (use_items < 0) use_items = env_on("PANGYA_TEST_ITEM");
+	if (use_items && mode == MODE_STAND && t == 150 && item_window && M8(doc_player(doc, me) + 0x94) > 0) {
+		rt_log("turns: test: player %u uses their first item (%08x)", me, M32(golf() + me * 0x270u + ITEM_SLOTS));
+		rt_call_guest(0x0890b6acu, item_window, 0, 0);
+	}
 	if (mode == MODE_STAND) {  // a window open (items, the board) keeps the stance: circle closes it
 		if (t % 600 == 450) rt_tap_buttons(0x2000), tapped = now;
-		tap = t % 600 == 90;
+		static int test_club = -1;  // PANGYA_TEST_CLUB=1 (tests): L (the next club, "LKEY") before each stance
+		if (test_club < 0) test_club = env_on("PANGYA_TEST_CLUB");
+		if (test_club && t == 200) {
+			rt_log("turns: test: player %u presses L (club %u)", me, M8(CLUB_OBJ + 0x28));
+			rt_tap_buttons(0x100), tapped = now;
+		}
+		if (test_club && t == 260) rt_log("turns: test: player %u now holds club %u", me, M8(CLUB_OBJ + 0x28));
+		tap = t % 600 == (uint64_t)(use_items || test_club ? 300 : 90);
 	}
 	else if (mode == 0x20000) tap = t % 180 == 179;
 	else if (mode == MODE_GAUGE && t > 8) {
@@ -1016,7 +1278,8 @@ void f_088a2070(CPU *c) {
 		autoplay(doc, M32(doc + 0x144), 0, 0);  // each copy's player is player 0
 	}
 	if (!g || M8(g + GOLF_TYPE) != 8) {
-		n_inbox = 0, replaying = false, own_shown = false, my_hole = 0;
+		n_inbox = 0, n_items = 0, replaying = false, own_shown = false, my_hole = 0;
+		memset(has_club, 0, sizeof has_club);
 		memset(worked, 0, sizeof worked);
 		memset(has_pending, 0, sizeof has_pending);
 		memset(has_next, 0, sizeof has_next);
@@ -1048,9 +1311,11 @@ void f_088a2070(CPU *c) {
 		usleep((useconds_t)stall_back * 1000000);
 	}
 	stall_mode = mode;
+	close_cancel();  // (should the stroke limit's check not have come)
 	next_turn(doc, mode, turn, me);
 	results(doc, mode, turn, me);
-	deliver_shots(doc, mode, turn, me);
+	clubs(doc, mode, turn, me);
+	deliver_shots(c, doc, mode, turn, me);
 	// A hole out (mode 0x1000, FUN_088ab05c) shows until +0x30, the time in the mode, reaches 1.3
 	// times +0x94 (at least 3.5 s), on the player's copy and on the others alike. A copy that got
 	// through it sooner (its player sped the ball up with cross) let the next player play while the
@@ -1072,6 +1337,15 @@ void f_088a2070(CPU *c) {
 	static int on = -1;  // PANGYA_NET_TRACE=1: the turn state when it changes
 	if (on < 0) on = env_on("PANGYA_NET_TRACE");
 	if (!on) return;
+	static uint32_t items_hole;
+	if (mode == MODE_STAND && items_hole != M8(doc + 0x156)) {
+		items_hole = M8(doc + 0x156);
+		for (uint32_t i = 0; i < M8(doc + 0xc1) && i < MAX_PLAYERS; i++) {
+			uint32_t sl = g + i * 0x270u + ITEM_SLOTS;
+			rt_log("turns: player %u: %u items %08x %08x %08x %08x, ball %08x, club set %08x", i, M8(doc_player(doc, i) + 0x94), M32(sl),
+			       M32(sl + 4), M32(sl + 8), M32(sl + 12), M32(g + i * 0x270u + 0x417), M32(g + i * 0x270u + 0x413));
+		}
+	}
 	char now[256];
 	int k = snprintf(now, sizeof now, "mode %x turn %u (me %u, id %x) hole %d", mode, turn, me, M32(g + 0x77), M8(doc + 0x156));
 	for (uint32_t i = 0; i < M8(doc + 0xc1) && i < 4; i++) {

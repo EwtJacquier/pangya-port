@@ -193,9 +193,27 @@ at its own resolution. `PANGYA_TEXPACK_LOG=1` logs every upload's key and every 
     - shows "Your Turn" to the player whose turn it is;
     - draws the HUD of a match against the computer (whose player is player 0) as this copy's
       player's: the power-shot sign on the gauge showed on the second player's copy in the other
-      player's turn, from the other player's power; and shows only the card (picture, strokes,
-      score, power gauge) of the player whose turn it is, on the left (the second player's own
-      card was on the right, the other player's in its place);
+      player's turn, from the other player's power; each player's ball (by the gauge and in the
+      spin circle) and club set showed in the other one's turn, the wind of a Silent Wind and the
+      round's pang counter were another player's (while it draws, the players read through the
+      getter FUN_0889a22c, their things in the round, G + 0x270 * player from +0x2a9, and the
+      per-player pictures swap with this copy's player's); and shows only the card (picture, strokes, score, power gauge) of the
+      player whose turn it is, on the left (the second player's own card was on the right, the
+      other player's in its place), with that player's nickname (the computer's opponent showed
+      its character's name, player 0 this copy's nickname);
+    - sends the items: an item used before a shot (Silent Wind, Strength Boost, the masteries...)
+      took effect only on that player's copy, through FUN_0890afb4; the others get it with its
+      random number (an item may fail) and take it in the same way once they stand in that
+      player's turn for that stroke, before the shot. Each player brings their own items: the
+      equipment screen puts this copy's player's in player 0's list (G+0x41b), which on the second
+      player's copy was the first player's and went back to the save at the end; each list now
+      sits with its player (the others' come with the profile) and this copy's goes back to
+      player 0's at the game over. The Mulligan Rose (the shot taken back) counts in the
+      statistics of this copy's player only (they counted the first player's on every copy).
+      `PANGYA_TEST_ITEMS=id,id` (hex) and `PANGYA_TEST_BALL=n` give a test copy items and a
+      ball, `PANGYA_TEST_ITEM=1` uses the first item before each shot;
+    - sends the club a player picks with L/R while aiming (the others saw the one the game picks
+      by itself until the shot came); `PANGYA_TEST_CLUB=1` presses L before each stance;
     - draws no ball markers (`mods/spot.c`): they show a "single" round's players where the
       others' balls are, but in turns everyone watches every ball and they stood in front of the
       view;

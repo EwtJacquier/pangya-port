@@ -308,6 +308,16 @@ Then, in Cloudflare's dashboard, **Zero Trust → Access → Applications → Ad
 application** for `pangya.your-domain.com`, with a policy that allows your friends' e-mail
 addresses: each one logs in with a code sent to their e-mail before the game opens.
 
+Or a simpler lock, one name and password for everyone (the browser asks for them before the page
+opens):
+
+```bash
+python3 tools/serve_web.py --set-password pangya   # asks for the password (kept hashed in port/.htpasswd)
+```
+
+and restart `serve_web.py`. `--set-password` again changes it; delete `port/.htpasswd` to open the
+page again.
+
 **Please read this before sharing:**
 
 - Whoever opens the address downloads the game's data from **your** ISO and the translated game

@@ -635,10 +635,18 @@ static bool pack_upload(TexEntry *e, const uint32_t *px, int pw, int ph, int iw,
 	return true;
 }
 
-// A replacement that was on its way: shown once it has arrived (checked once a frame).
+// A replacement that was on its way: shown once it has arrived (checked once a frame). A big one
+// takes a while to go to the GPU (a 2048x2048 picture is 16 MB, with its mipmaps), and a new place
+// asks for many at once: past PACK_FRAME_US in a frame, the rest wait for the next frames (their
+// originals show until then) instead of holding this one up.
+#define PACK_FRAME_US 6000
 static void pack_poll(TexEntry *e) {
+	static uint64_t spent_frame, spent_us;
 	if (e->pack_frame == frame_no) return;
+	if (spent_frame != frame_no) spent_frame = frame_no, spent_us = 0;
+	if (spent_us >= PACK_FRAME_US) return;
 	e->pack_frame = frame_no;
+	uint64_t t0 = rt_now_us();
 	int pw, ph, iw, ih;
 	bool failed;
 	uint32_t *px = texpack_load(e->pack1 - 1, &pw, &ph, &iw, &ih, &failed);
@@ -650,6 +658,7 @@ static void pack_poll(TexEntry *e) {
 	pack_upload(e, px, pw, ph, iw, ih, e->w, e->h);
 	free(px);
 	e->pack1 = 0;
+	spent_us += rt_now_us() - t0;
 }
 
 static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {

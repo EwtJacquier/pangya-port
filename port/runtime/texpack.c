@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "platform.h"
 #include "rt.h"
@@ -309,9 +310,32 @@ uint32_t *texpack_load(int idx, int *pw, int *ph, int *iw, int *ih, bool *failed
 	}
 	char path[600];
 	snprintf(path, sizeof path, "%s/%s", dir, e->file);
-	size_t n;
-	uint8_t *d = read_all(path, &n);
-	if (!d) {
+	// On the web the page's worker decodes the picture off the game's thread and writes its pixels
+	// ("RAW1", width, height, 4 bytes unused, then RGBA rows: web/shell.html); natively, or from a
+	// page without the worker, the file is the pack's QOI.
+	uint32_t *px = NULL;
+	FILE *f = fopen(path, "rb");
+	if (f) {
+		uint8_t head[16];
+		if (fread(head, 1, 16, f) == 16 && !memcmp(head, "RAW1", 4)) {
+			uint32_t w, h;
+			memcpy(&w, head + 4, 4);
+			memcpy(&h, head + 8, 4);
+			px = w && h && w <= 8192 && h <= 8192 ? malloc((size_t)w * h * 4) : NULL;
+			if (px && fread(px, 4, (size_t)w * h, f) != (size_t)w * h) free(px), px = NULL;
+			*pw = (int)w, *ph = (int)h;
+			fclose(f);
+		} else {
+			fclose(f);
+			size_t n;
+			uint8_t *d = read_all(path, &n);
+			px = d ? qoi_decode(d, n, pw, ph) : NULL;
+			free(d);
+		}
+		// A page keeps no copy: the picture is in the GPU now, and in the browser's cache should it
+		// be needed again (asked for once more then).
+		if (remote) unlink(path), e->state = 0;
+	} else {
 		if (remote) {
 			struct stat st;
 			char mark[620];
@@ -330,8 +354,6 @@ uint32_t *texpack_load(int idx, int *pw, int *ph, int *iw, int *ih, bool *failed
 		*failed = true;
 		return NULL;
 	}
-	uint32_t *px = qoi_decode(d, n, pw, ph);
-	free(d);
 	if (!px || *pw % e->iw || *ph % e->ih || *pw / e->iw != *ph / e->ih) {
 		rt_log("texpack: %s is not a %dx%d picture at an integer scale", e->file, e->iw, e->ih);
 		free(px);

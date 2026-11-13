@@ -19,3 +19,4 @@ port/third_party/ffmpeg/*/lib/
 # Secrets (LiveKit credentials in port/.env)
 .env
 *.env
+.htpasswd

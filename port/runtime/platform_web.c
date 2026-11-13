@@ -207,14 +207,22 @@ EM_JS(void, js_debug_upload, (const char *pathp, const char *namep), {
 
 void plat_debug_upload(const char *path, const char *name) { js_debug_upload(path, name); }
 
-// Replacement textures (texpack.c) arrive in the background; the file appears once complete.
+// Replacement textures (texpack.c) arrive in the background; the file appears once complete. A
+// picture of the pack comes through the page's texture worker (web/shell.html: from this browser's
+// cache when it has it, decoded there into the pixels texpack.c reads, "RAW1"), so the game's
+// thread doesn't decode it.
 EM_JS(void, js_fetch, (const char *urlp, const char *pathp), {
 	const url = UTF8ToString(urlp), path = UTF8ToString(pathp);
-	fetch(url).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); }).then((b) => {
-		FS.writeFile(path + '.part', new Uint8Array(b));
+	const done = (b) => {
+		FS.writeFile(path + '.part', b, {canOwn: true});
 		FS.rename(path + '.part', path);
-	}).catch((e) => {
-		console.error('fetch ' + url + ': ' + e.message);
+	};
+	const pack = Module.pangyaTexture && url.startsWith('textures/') && !url.startsWith('textures/font-') && url.endsWith('.qoi');
+	(pack ? Module.pangyaTexture(url) : fetch(url).then((r) => {
+		if (!r.ok) throw new Error('HTTP ' + r.status);
+		return r.arrayBuffer().then((b) => new Uint8Array(b));
+	})).then(done).catch((e) => {
+		console.error('fetch ' + url + ': ' + (e && e.message || e));
 		try { FS.writeFile(path + '.failed', ''); } catch (e2) {}
 	});
 });

@@ -106,15 +106,15 @@
   #login { position: fixed; inset: 0; display: none; z-index: 2; font-family: "Trebuchet MS", Tahoma, Verdana, sans-serif; color: #12355b;
     overflow: hidden auto; }
   #login.open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  #login-art { position: absolute; right: 0; bottom: 0; height: 100%; min-width: 55%; max-width: 58%; object-fit: cover; object-position: left top;
+  #login-art, #preload-art { position: absolute; right: 0; bottom: 0; height: 100%; min-width: 55%; max-width: 58%; object-fit: cover; object-position: left top;
     -webkit-mask-image: linear-gradient(to right, transparent, #000 22%); mask-image: linear-gradient(to right, transparent, #000 22%);
     z-index: 0; }
-  #login .side { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; padding: 24px;
+  #login .side, #preload .side { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; padding: 24px;
     box-sizing: border-box; min-height: 100vh; justify-content: safe center; gap: 10px; }
-  #login .logo-side { justify-content: flex-end; padding-bottom: max(24px, 7vh); }
-  #logo { width: min(400px, 82%); height: auto; display: block;
+  #login .logo-side, #preload .logo-side { justify-content: flex-end; padding-bottom: max(24px, 7vh); }
+  #logo, #pre-logo { width: min(400px, 82%); height: auto; display: block;
     filter: drop-shadow(0 4px 0 rgba(10,50,110,.3)) drop-shadow(0 0 18px rgba(255,255,255,.65)); }
-  #logo + .wordmark { display: none; }  /* only when the logo is missing */
+  #logo + .wordmark, #pre-logo + .wordmark { display: none; }  /* only when the logo is missing */
   .wordmark { font: italic 900 56px/1 "Arial Rounded MT Bold", "Trebuchet MS", sans-serif; letter-spacing: 1px; color: #fff;
     -webkit-text-stroke: 3px #1a5fb4; paint-order: stroke fill; text-shadow: 0 5px 0 #0d3f80, 0 8px 14px rgba(0,0,0,.25); margin: 18px 0 10px; }
   .wordmark small { display: block; font-size: 17px; -webkit-text-stroke: 0; color: #ffd23a; text-shadow: 0 2px 0 #b35a00; letter-spacing: 3px; }
@@ -147,7 +147,7 @@
   .field input:hover { border-color: #4d8fd0 #b7d6f0 #b7d6f0 #4d8fd0; }
   .field input:focus { outline: 0; background: #fff; border-color: #1d82e0; box-shadow: 0 0 0 3px rgba(43,147,234,.25); }
   /* the browser's autofill keeps the page's colors (the page is dark elsewhere) */
-  #login, #picker { color-scheme: light; }
+  #login, #picker, #preload { color-scheme: light; }
   .field input:-webkit-autofill, .field input:autofill { -webkit-text-fill-color: #10243b; caret-color: #10243b;
     -webkit-box-shadow: 0 0 0 40px #fff inset; box-shadow: 0 0 0 40px #fff inset; transition: background-color 99999s; }
   .field input:-webkit-autofill:focus, .field input:autofill:focus { -webkit-box-shadow: 0 0 0 40px #fff inset, 0 0 0 3px rgba(43,147,234,.25);
@@ -182,10 +182,38 @@
     background: rgba(255,255,255,.8); box-shadow: 0 2px 6px rgba(6,40,90,.2); }
   #login.new .login-only, #login:not(.new) .new-only { display: none; }
 
+  /* ---- First visit: the island comes to this browser (the ISO and the HD textures, kept here so the
+     game never waits on the network), between the sign-in and the game. The bar is the game's own
+     power gauge: glossy green, striped, a ball riding its end. */
+  #preload { position: fixed; inset: 0; display: none; z-index: 2; font-family: "Trebuchet MS", Tahoma, Verdana, sans-serif; color: #12355b;
+    overflow: hidden auto; }
+  #preload.open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .meter { position: relative; height: 26px; margin: 4px 0 8px; border-radius: 14px; overflow: hidden;
+    background: linear-gradient(#08356d, #1a5fa8); border: 1px solid #0b4c95;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.5), 0 1px 0 #fff; }
+  .meter i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 14px; overflow: hidden;
+    background: linear-gradient(#c8f57f, #78d22f 50%, #4fb515 51%, #6fd12a);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 0 12px rgba(150,235,70,.7); transition: width .4s ease-out; }
+  .meter i::before { content: ""; position: absolute; top: 0; bottom: 0; left: -29px; right: 0;
+    background: repeating-linear-gradient(-45deg, rgba(255,255,255,.25) 0 10px, transparent 10px 20px);
+    animation: meter-run .7s linear infinite; }
+  .meter i::after { content: ""; position: absolute; left: 4px; right: 4px; top: 2px; height: 38%; border-radius: 10px;
+    background: linear-gradient(rgba(255,255,255,.8), rgba(255,255,255,.1)); }
+  @keyframes meter-run { to { transform: translateX(28.28px); } }
+  .meter .ball { position: absolute; top: 4px; left: 4px; width: 16px; height: 16px; border-radius: 50%; transition: left .4s ease-out;
+    background: radial-gradient(circle at 35% 30%, #fff 0 35%, #dfe9f2 60%, #9fb2c4); box-shadow: 0 1px 2px rgba(0,0,0,.5); }
+  .meter span { position: absolute; inset: 0; display: grid; place-items: center; font: bold 13px "Trebuchet MS", Tahoma, sans-serif;
+    color: #fff; text-shadow: 0 1px 0 #0a3b78, 0 0 4px rgba(0,0,0,.6); letter-spacing: .5px; }
+  .pre-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; font-weight: bold; color: #1d4f86; }
+  .pre-row span:last-child { color: #2a5078; font-weight: normal; }
+  #pre-eta { margin: 6px 0 14px; font-size: 12px; color: #5b7fa6; min-height: 1.2em; }
+  .pre-note { font-size: 12px; color: #2a5078; }
+  @media (prefers-reduced-motion: reduce) { .meter i::before { animation: none; } .meter i, .meter .ball { transition: none; } }
+
   /* ---- Phones and tablets: the illustration, the logo and a note */
   #mobile { display: none; }
   html.mobile, html.mobile body { overflow: auto; }
-  html.mobile #stage, html.mobile #login, html.mobile #picker, html.mobile #gear, html.mobile #status, html.mobile #menu { display: none !important; }
+  html.mobile #stage, html.mobile #login, html.mobile #picker, html.mobile #preload, html.mobile #gear, html.mobile #status, html.mobile #menu { display: none !important; }
   html.mobile #mobile { display: grid; position: fixed; inset: 0; z-index: 4; place-items: center; padding: 16px; overflow: auto;
     font-family: "Trebuchet MS", Tahoma, Verdana, sans-serif; color: #12355b; color-scheme: light; }
   #mobile-art { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center top; opacity: .9; }
@@ -253,6 +281,29 @@
   </div>
   <div class="side logo-side">
     <img id="logo" src="logo.png" alt="Pangya: Fantasy Golf" onerror="this.remove()">
+    <div class="wordmark" aria-hidden="true">PANGYA<small>FANTASY GOLF</small></div>
+  </div>
+</div>
+<div id="preload" class="sky" role="dialog" aria-modal="true" aria-labelledby="pre-title">
+  <img id="preload-art" src="art/title.png" alt="" onerror="this.remove()">
+  <div class="side form-side">
+    <div class="win">
+      <div class="bar"><span class="ball"></span><span id="pre-title">Heading to the island…</span></div>
+      <div class="body">
+        <p class="hello">First visit: the island comes to this browser!</p>
+        <div class="meter" id="pre-meter" role="progressbar" aria-labelledby="pre-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <i id="pre-fill"></i><b class="ball" id="pre-ball"></b><span id="pre-pct">0%</span></div>
+        <div class="pre-row"><span id="pre-what">Getting ready</span><span id="pre-size"></span></div>
+        <p id="pre-eta">Connecting…</p>
+        <div class="actions"><span class="pre-note">Next time the game starts right away.</span>
+          <button type="button" class="guest" id="pre-skip">Play now</button></div>
+        <p class="tip">Play now skips the rest: what is missing loads while you play, and the rest comes next time.</p>
+      </div>
+    </div>
+    <p class="fine">Kept in this browser, so the game never waits for the network.</p>
+  </div>
+  <div class="side logo-side">
+    <img id="pre-logo" src="logo.png" alt="Pangya: Fantasy Golf" onerror="this.remove()">
     <div class="wordmark" aria-hidden="true">PANGYA<small>FANTASY GOLF</small></div>
   </div>
 </div>
@@ -688,7 +739,7 @@ if (!window.pangyaMobile) {
   applyInput();
   applyHd();
   function start() {
-    if (!Module.ready || !Module.isoBlob || Module.started) return;
+    if (!Module.ready || !Module.isoBlob || !Module.pangyaPreloaded || Module.started) return;
     Module.started = true;
     document.getElementById('picker').style.display = 'none';
     statusEl.textContent = 'Esc: settings (fullscreen, keys and gamepad)';
@@ -696,19 +747,263 @@ if (!window.pangyaMobile) {
     canvas.focus();
     Module.callMain(['iso', '/image.bin']);
   }
+
+  // ---- The ISO and the HD textures from the page's server -------------------------------------------
+  // Every read of the game's disc that misses io.c's cache is a round trip, and the game waits for
+  // it: from a server reached through the internet (a tunnel: 40-200 ms each) the game stalled each
+  // time it loaded something new, 64 KB at a time. The ISO goes in 1 MB blocks, the next two fetched
+  // ahead; the blocks and the pack's pictures stay in this browser (Cache Storage), so later visits
+  // read them from the disk, and the first visit can bring them all in before the game (the bar).
+  // The pack's pictures are decoded in workers: the game's thread only puts them on the GPU. A page
+  // on this computer keeps nothing (?preload=1 to try it there; ?preload=0 never).
+  const netq = new URLSearchParams(location.search);
+  const LOCAL = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  const KEEP = 'caches' in window && netq.get('preload') !== '0' && (!LOCAL || netq.get('preload') === '1');
+  const ISO_BLOCK = 1 << 20, TEX_CACHE = 'pangya-tex-v1';
+  const here = (p) => new URL(p, location.href).href;
+  const nap = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  function remoteIso(url, size) {
+    const mem = new Map(), inflight = new Map(), last = Math.ceil(size / ISO_BLOCK) - 1;
+    const store = KEEP ? caches.open('pangya-iso-' + size).catch(() => null) : Promise.resolve(null);
+    const key = (i) => here('__iso/' + i);
+    const keep = (i, b) => { mem.delete(i); mem.set(i, b); if (mem.size > 96) mem.delete(mem.keys().next().value); };
+    const download = async (i) => {  // the game waits for it: tried again a few times before giving up
+      const a = i * ISO_BLOCK, e = Math.min(size, a + ISO_BLOCK) - 1;
+      for (let k = 0; ; k++) {
+        try {
+          const r = await fetch(url, {headers: {Range: `bytes=${a}-${e}`}});
+          if (r.status !== 206 && !(r.status === 200 && a === 0 && e === size - 1)) throw new Error('ISO: HTTP ' + r.status);
+          return new Uint8Array(await r.arrayBuffer());
+        } catch (err) {
+          if (k === 4) throw err;
+          await nap(500 * (k + 1));
+        }
+      }
+    };
+    const block = (i) => {
+      const m = mem.get(i);
+      if (m) { keep(i, m); return Promise.resolve(m); }
+      if (inflight.has(i)) return inflight.get(i);
+      const p = (async () => {
+        const c = await store, hit = c && await c.match(key(i));
+        if (hit) return new Uint8Array(await hit.arrayBuffer());
+        const b = await download(i);
+        if (c) c.put(key(i), new Response(b.slice())).catch(() => {});
+        return b;
+      })().then((b) => { keep(i, b); return b; });
+      inflight.set(i, p);
+      p.catch(() => {}).finally(() => inflight.delete(i));
+      return p;
+    };
+    return {
+      size, last, key, store,
+      // a block into this browser's store only (the bar)
+      fetchBlock: async (i) => { const c = await store; await c.put(key(i), new Response(await download(i))); },
+      slice: (a, b) => ({
+        arrayBuffer: async () => {
+          b = Math.min(b, size);
+          if (b <= a) return new ArrayBuffer(0);
+          const first = Math.floor(a / ISO_BLOCK), end = Math.floor((b - 1) / ISO_BLOCK);
+          for (let i = end + 1; i <= Math.min(last, end + 2); i++) block(i).catch(() => {});  // ahead
+          const parts = await Promise.all(Array.from({length: end - first + 1}, (_, k) => block(first + k)));
+          const out = new Uint8Array(b - a);
+          let o = 0;
+          parts.forEach((part, k) => {
+            const from = k === 0 ? a - first * ISO_BLOCK : 0, n = Math.min(part.length - from, b - a - o);
+            out.set(part.subarray(from, from + n), o);
+            o += n;
+          });
+          return out.buffer;
+        },
+      }),
+    };
+  }
+
+  // A pack picture (QOI) decoded in a worker into what texpack.c reads: "RAW1", width, height (little
+  // endian), 4 unused bytes, then RGBA rows.
+  const TEX_WORKER = `
+    let store;
+    const qoi = (buf) => {
+      const d = new Uint8Array(buf), v = new DataView(buf);
+      if (d.length < 22 || v.getUint32(0) !== 0x716f6966) throw new Error('not a QOI picture');
+      const w = v.getUint32(4), h = v.getUint32(8), end = 16 + w * h * 4;
+      const out = new Uint8Array(end), ov = new DataView(out.buffer), idx = new Uint8Array(256);
+      out.set([82, 65, 87, 49]);
+      ov.setUint32(4, w, true);
+      ov.setUint32(8, h, true);
+      let r = 0, g = 0, b = 0, a = 255, p = 14, run = 0;
+      for (let o = 16; o < end; o += 4) {
+        if (run > 0) run--;
+        else {
+          const b1 = d[p++];
+          if (b1 === 0xfe) { r = d[p++]; g = d[p++]; b = d[p++]; }
+          else if (b1 === 0xff) { r = d[p++]; g = d[p++]; b = d[p++]; a = d[p++]; }
+          else if (b1 < 0x40) { const i = b1 * 4; r = idx[i]; g = idx[i + 1]; b = idx[i + 2]; a = idx[i + 3]; }
+          else if (b1 < 0x80) { r = (r + ((b1 >> 4) & 3) - 2) & 255; g = (g + ((b1 >> 2) & 3) - 2) & 255; b = (b + (b1 & 3) - 2) & 255; }
+          else if (b1 < 0xc0) { const b2 = d[p++], vg = (b1 & 63) - 32; r = (r + vg - 8 + (b2 >> 4)) & 255; g = (g + vg) & 255; b = (b + vg - 8 + (b2 & 15)) & 255; }
+          else run = b1 & 63;
+          const i = ((r * 3 + g * 5 + b * 7 + a * 11) & 63) * 4;
+          idx[i] = r; idx[i + 1] = g; idx[i + 2] = b; idx[i + 3] = a;
+        }
+        out[o] = r; out[o + 1] = g; out[o + 2] = b; out[o + 3] = a;
+      }
+      return out;
+    };
+    onmessage = async (e) => {
+      const {id, url, keep} = e.data;
+      try {
+        if (store === undefined) store = keep && self.caches ? await caches.open('${TEX_CACHE}').catch(() => null) : null;
+        let r = store && await store.match(url);
+        if (!r) {
+          r = await fetch(url, {credentials: 'same-origin'});
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          if (store) store.put(url, r.clone()).catch(() => {});
+        }
+        const out = qoi(await r.arrayBuffer());
+        postMessage({id, out}, [out.buffer]);
+      } catch (err) { postMessage({id, error: String(err && err.message || err)}); }
+    };`;
+  const texWorkers = [], texWaiting = new Map();
+  let texSeq = 0;
+  Module.pangyaTexture = (url) => new Promise((resolve, reject) => {
+    try {
+      if (!texWorkers.length) {
+        const src = URL.createObjectURL(new Blob([TEX_WORKER], {type: 'text/javascript'}));
+        for (let i = 0; i < 2; i++) {
+          const w = new Worker(src);
+          w.onmessage = (e) => {
+            const t = texWaiting.get(e.data.id);
+            texWaiting.delete(e.data.id);
+            if (t) e.data.error ? t.reject(new Error(e.data.error)) : t.resolve(e.data.out);
+          };
+          texWorkers.push(w);
+        }
+      }
+    } catch (e) {  // no workers here: the game decodes the QOI itself
+      delete Module.pangyaTexture;
+      fetch(url).then((r) => r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status)))
+        .then((b) => resolve(new Uint8Array(b)), reject);
+      return;
+    }
+    const id = ++texSeq;
+    texWaiting.set(id, {resolve, reject});
+    texWorkers[id % texWorkers.length].postMessage({id, url: here(url), keep: KEEP});
+  });
+
+  // The bar: the ISO's blocks, then the pack's pictures, into this browser's stores (whatever is
+  // there already is skipped; a visit that left halfway goes on from there). Once all of it is in,
+  // a mark in each store tells later visits to go straight to the game.
+  async function preload(iso) {
+    if (!KEEP || !iso.fetchBlock) return;
+    const isoStore = await iso.store;
+    const texStore = settings.hd ? await caches.open(TEX_CACHE).catch(() => null) : null;
+    if (!isoStore) return;
+    const index = texStore ? await fetch('textures/index.txt').then((r) => r.ok ? r.text() : '').catch(() => '') : '';
+    const files = index.split('\n').map((l) => l.trim().split(/\s+/)).filter((f) => f.length >= 4 && !f[0].startsWith('#'))
+      .map((f) => here('textures/' + f[3]));
+    let h = 0x811c9dc5;
+    for (let i = 0; i < index.length; i++) h = Math.imul(h ^ index.charCodeAt(i), 16777619) >>> 0;
+    const isoMark = iso.key('complete'), texMark = here('__tex/complete-' + h.toString(16));
+    const isoDone = !!(await isoStore.match(isoMark)), texDone = !files.length || !!(await texStore.match(texMark));
+    if (isoDone && texDone) return;
+    const st = await fetch('status').then((r) => r.json()).catch(() => ({}));
+    const total = (isoDone ? 0 : iso.size) + (texDone ? 0 : st.textures_bytes || files.length * 4e5);
+    try {
+      const est = await navigator.storage.estimate();
+      if (est.quota && est.quota < total * 1.1) {
+        console.log(`preload: this browser keeps ${Math.round(est.quota / 1e6)} MB, the island needs ${Math.round(total / 1e6)} MB`);
+        return;
+      }
+      if (navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    } catch (e) { /* no estimate: try anyway */ }
+
+    const el = (id) => document.getElementById(id), box = el('preload');
+    const size = (b) => b >= 1e9 ? (b / 1e9).toFixed(2) + ' GB' : Math.round(b / 1e6) + ' MB';
+    const time = (s) => s >= 90 ? Math.round(s / 60) + ' min' : Math.max(1, Math.round(s)) + ' s';
+    let done = 0, got = 0, skip = false, failed = 0, finish;
+    const t0 = performance.now(), ended = new Promise((r) => { finish = r; });
+    let shown = 0;
+    const show = (what, now) => {  // a few times a second: the bar's glide finishes between them
+      if (what) el('pre-what').textContent = what;
+      if (!now && !what && performance.now() - shown < 250) return;
+      shown = performance.now();
+      const pct = total ? Math.min(100, done / total * 100) : 100;
+      el('pre-fill').style.width = pct.toFixed(2) + '%';
+      el('pre-ball').style.left = `calc(${pct.toFixed(2)}% - ${(pct * 0.24).toFixed(1)}px + 4px)`;
+      el('pre-pct').textContent = Math.floor(pct) + '%';
+      el('pre-meter').setAttribute('aria-valuenow', String(Math.floor(pct)));
+      el('pre-size').textContent = size(done) + ' of ' + size(total);
+      const secs = (performance.now() - t0) / 1000, rate = got / Math.max(secs, 0.5);
+      el('pre-eta').textContent = got > 3e6 ? `${(rate / 1e6).toFixed(1)} MB/s · about ${time((total - done) / rate)} to go` : 'Connecting…';
+    };
+    el('pre-skip').onclick = () => { skip = true; finish(); };
+    box.classList.add('open');
+    el('pre-skip').focus();
+    show();
+    const pool = (items, n, fn) => {
+      let next = 0;
+      return Promise.all(Array.from({length: n}, async () => { while (!skip && next < items.length) await fn(items[next++]); }));
+    };
+    const tries = async (fn) => {
+      for (let k = 0; k < 3 && !skip; k++) {
+        try { return await fn(); } catch (e) { if (k === 2) { failed++; console.error('preload:', e.message || e); } else await nap(1500 * (k + 1)); }
+      }
+    };
+    (async () => {
+      if (!isoDone) {
+        show('The courses and the characters');
+        const before = failed;
+        await pool(Array.from({length: iso.last + 1}, (_, i) => i), 4, async (i) => {
+          const len = Math.min(ISO_BLOCK, iso.size - i * ISO_BLOCK);
+          if (!(await isoStore.match(iso.key(i)))) await tries(async () => { await iso.fetchBlock(i); got += len; });
+          done += len;
+          show();
+        });
+        if (!skip && failed === before) await isoStore.put(isoMark, new Response('1'));
+      }
+      if (!texDone && !skip) {
+        show('The HD textures');
+        const before = failed;
+        await pool(files, 6, async (url) => {
+          const hit = await texStore.match(url);
+          if (hit) {
+            done += Number(hit.headers.get('Content-Length')) || 0;
+            return show();
+          }
+          await tries(async () => {
+            const r = await fetch(url, {credentials: 'same-origin'});
+            if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + url);
+            const n = Number(r.headers.get('Content-Length')) || 0;
+            await texStore.put(url, r);
+            done += n, got += n;
+          });
+          show();
+        });
+        if (!skip && failed === before) await texStore.put(texMark, new Response('1'));
+      }
+      finish();
+    })().catch((e) => { console.error('preload:', e); finish(); });
+    await ended;
+    if (!skip) {
+      done = total;
+      show(failed ? 'Ready (some pieces load while you play)' : 'Ready!', true);
+      el('pre-eta').textContent = '\u00a0';
+      await nap(700);
+    }
+    box.classList.remove('open');
+  }
+
   // The ISO comes from the server that hosts the page (/game.iso, read in byte ranges), or from
   // ?iso=URL; only if neither exists the player picks a local file.
   function useUrl(url) {
     return fetch(url, {method: 'HEAD'}).then((r) => {
       const size = Number(r.headers.get('Content-Length'));
       if (!r.ok || !size) throw new Error('no ISO at ' + url);
-      Module.isoBlob = {
-        size,
-        slice: (a, b) => ({
-          arrayBuffer: () => fetch(url, {headers: {Range: `bytes=${a}-${Math.min(b, size) - 1}`}}).then((x) => x.arrayBuffer()),
-        }),
-      };
-      start();
+      Module.isoBlob = remoteIso(url, size);
+      // after the sign-in (or "Play without an account"), before the game
+      accountReady.then(() => preload(Module.isoBlob)).catch((e) => console.error('preload:', e))
+        .finally(() => { Module.pangyaPreloaded = true; start(); });
     });
   }
   useUrl(new URLSearchParams(location.search).get('iso') || 'game.iso').catch(() => {
@@ -719,6 +1014,7 @@ if (!window.pangyaMobile) {
     const f = e.target.files[0];
     if (!f) return;
     Module.isoBlob = f;
+    Module.pangyaPreloaded = true;  // a file of this computer: nothing to bring in
     start();
   });
 }

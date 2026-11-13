@@ -654,11 +654,17 @@ static void pack_poll(TexEntry *e) {
 		if (failed) e->pack1 = 0;
 		return;
 	}
+	uint64_t t1 = rt_now_us();
 	batch_flush();  // queued draws still show the original
 	pack_upload(e, px, pw, ph, iw, ih, e->w, e->h);
 	free(px);
 	e->pack1 = 0;
-	spent_us += rt_now_us() - t0;
+	uint64_t t2 = rt_now_us();
+	spent_us += t2 - t0;
+	static int slow_log = -1;  // PANGYA_TEXPACK_SLOW=ms: the pictures that took longer than that
+	if (slow_log < 0) slow_log = getenv("PANGYA_TEXPACK_SLOW") ? atoi(getenv("PANGYA_TEXPACK_SLOW")) : 0;
+	if (slow_log && t2 - t0 >= (uint64_t)slow_log * 1000)
+		rt_log("texpack: %dx%d in %.1f ms (read %.1f, to the GPU %.1f)", pw, ph, (t2 - t0) / 1000.0, (t1 - t0) / 1000.0, (t2 - t1) / 1000.0);
 }
 
 static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {

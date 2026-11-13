@@ -267,8 +267,10 @@ def main():
             super().__init__(*a, directory=str(web), **kw)
 
         def authorized(self):
-            """With a password file, the request's Basic credentials (else a 401 asking for them)."""
-            if not users:
+            """With a password file, the request's Basic credentials (else a 401 asking for them).
+            The tab's icons go without: the browser fetches them on its own, without the password
+            just typed, and their 401 made it ask for the password a second time."""
+            if not users or self.path.split("?")[0] in ("/favicon.ico", "/favicon-32.png", "/apple-touch-icon.png"):
                 return True
             h = self.headers.get("Authorization", "")
             if h in good_auth:

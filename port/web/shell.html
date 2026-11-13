@@ -762,58 +762,136 @@ if (!window.pangyaMobile) {
   const ISO_BLOCK = 1 << 20, TEX_CACHE = 'pangya-tex-v1';
   const here = (p) => new URL(p, location.href).href;
   const nap = (ms) => new Promise((r) => setTimeout(r, ms));
+  // The game waits for the disc, not for the HD textures (it shows the originals until they come):
+  // they share the server's upload, so no picture starts downloading while a read of the disc is
+  // on its way, and two at most at a time (with HD on, the disc's reads waited behind a dozen
+  // pictures and the game stalled).
+  let isoBusy = 0;
+  const TEX_GATE = netq.get('texgate') !== '0';  // ?texgate=0: the pictures as before (tests)
 
+  // The game asks io.c for 64 KB pieces. A piece comes from memory, else from this browser's
+  // stores (the bar's 1 MB blocks, or pieces kept from an earlier visit), else from the server: just
+  // the missing pieces in one request, and when the game reads on from where it stopped (a file read
+  // through) the next three pieces with them. Pieces from the server are kept for the next visit.
+  // Every 10 s of activity the console says where the reads came from and how long the game waited.
   function remoteIso(url, size) {
-    const mem = new Map(), inflight = new Map(), last = Math.ceil(size / ISO_BLOCK) - 1;
+    const PIECE = 64 << 10, PER_BLOCK = ISO_BLOCK / PIECE, last = Math.ceil(size / ISO_BLOCK) - 1;
+    const lastPiece = Math.ceil(size / PIECE) - 1;
+    const mem = new Map(), noBlock = new Set(), inflight = new Map();
     const store = KEEP ? caches.open('pangya-iso-' + size).catch(() => null) : Promise.resolve(null);
-    const key = (i) => here('__iso/' + i);
-    const keep = (i, b) => { mem.delete(i); mem.set(i, b); if (mem.size > 96) mem.delete(mem.keys().next().value); };
-    const download = async (i) => {  // the game waits for it: tried again a few times before giving up
-      const a = i * ISO_BLOCK, e = Math.min(size, a + ISO_BLOCK) - 1;
+    const pieces = KEEP ? caches.open('pangya-isop-' + size).catch(() => null) : Promise.resolve(null);
+    const key = (i) => here('__iso/' + i), pkey = (p) => here('__isop/' + p);
+    const st = {net: 0, netBytes: 0, local: 0, wait: 0, since: performance.now()};
+    const keep = (p, b) => { mem.delete(p); mem.set(p, b); if (mem.size > 1536) mem.delete(mem.keys().next().value); };
+    const range = async (a, e) => {  // bytes a..e from the server, tried again a few times
+      isoBusy++;
+      try {
+        return await rangeOnce(a, e);
+      } finally {
+        isoBusy--;
+        texPump();
+      }
+    };
+    const rangeOnce = async (a, e) => {
       for (let k = 0; ; k++) {
         try {
-          const r = await fetch(url, {headers: {Range: `bytes=${a}-${e}`}});
+          const r = await fetch(url, {headers: {Range: `bytes=${a}-${e}`}, priority: 'high'});
           if (r.status !== 206 && !(r.status === 200 && a === 0 && e === size - 1)) throw new Error('ISO: HTTP ' + r.status);
-          return new Uint8Array(await r.arrayBuffer());
+          const b = new Uint8Array(await r.arrayBuffer());
+          if (b.length !== e - a + 1) throw new Error('ISO: short read');
+          return b;
         } catch (err) {
           if (k === 4) throw err;
           await nap(500 * (k + 1));
         }
       }
     };
-    const block = (i) => {
-      const m = mem.get(i);
-      if (m) { keep(i, m); return Promise.resolve(m); }
-      if (inflight.has(i)) return inflight.get(i);
-      const p = (async () => {
-        const c = await store, hit = c && await c.match(key(i));
-        if (hit) return new Uint8Array(await hit.arrayBuffer());
-        const b = await download(i);
-        if (c) c.put(key(i), new Response(b.slice())).catch(() => {});
-        return b;
-      })().then((b) => { keep(i, b); return b; });
-      inflight.set(i, p);
-      p.catch(() => {}).finally(() => inflight.delete(i));
-      return p;
+    const blockLoads = new Map();
+    const loadBlock = (blk) => {  // the bar's 1 MB block into memory: true if this browser has it
+      if (!blockLoads.has(blk)) {
+        blockLoads.set(blk, (async () => {
+          const c = await store, hit = c && await c.match(key(blk));
+          if (!hit) return false;
+          const b = new Uint8Array(await hit.arrayBuffer());
+          for (let k = 0; k * PIECE < b.length; k++) keep(blk * PER_BLOCK + k, b.subarray(k * PIECE, (k + 1) * PIECE));
+          return true;
+        })().catch(() => false).finally(() => blockLoads.delete(blk)));
+      }
+      return blockLoads.get(blk);
     };
+    const fromStores = async (p) => {  // a piece from the bar's block or a kept piece, else null
+      const blk = Math.floor(p / PER_BLOCK);
+      if (!noBlock.has(blk)) {
+        const has = await loadBlock(blk);
+        if (has && mem.has(p)) return mem.get(p);
+        if (!has) noBlock.add(blk);
+      }
+      const cp = await pieces, hit = cp && await cp.match(pkey(p));
+      return hit ? new Uint8Array(await hit.arrayBuffer()) : null;
+    };
+    let lastEnd = -1;
+    const get = async (first, end, ahead) => {  // pieces first..end, in memory afterwards
+      const want = [];
+      for (let p = first; p <= end; p++) if (!mem.has(p) && !inflight.has(p)) want.push(p);
+      const local = await Promise.all(want.map((p) => mem.has(p) ? mem.get(p) : fromStores(p)));
+      const missing = [];
+      want.forEach((p, k) => { if (local[k]) { keep(p, local[k]); st.local++; } else missing.push(p); });
+      if (missing.length) {
+        // one request from the first missing piece to the last (and on, reading through)
+        let lo = missing[0], hi = missing[missing.length - 1];
+        if (ahead) for (let n = 0; n < 3 && hi < lastPiece && !mem.has(hi + 1) && !inflight.has(hi + 1); n++) hi++;
+        const job = range(lo * PIECE, Math.min(size, (hi + 1) * PIECE) - 1).then(async (b) => {
+          st.net++, st.netBytes += b.length;
+          const cp = await pieces;
+          for (let p = lo; p <= hi; p++) {
+            const piece = b.slice((p - lo) * PIECE, (p - lo + 1) * PIECE);
+            keep(p, piece);
+            if (cp) cp.put(pkey(p), new Response(piece)).catch(() => {});
+          }
+        });
+        for (let p = lo; p <= hi; p++) inflight.set(p, job);
+        job.catch(() => {}).finally(() => { for (let p = lo; p <= hi; p++) inflight.delete(p); });
+      }
+      const waits = [];
+      for (let p = first; p <= end; p++) if (!mem.has(p) && inflight.has(p)) waits.push(inflight.get(p));
+      await Promise.all(waits);
+    };
+    setInterval(() => {
+      if (!st.net && !st.local) return;
+      console.log(`iso: ${st.local} piece(s) from this browser, ${st.net} request(s) to the server ` +
+        `(${(st.netBytes / 1e6).toFixed(1)} MB), the game waited ${(st.wait / 1000).toFixed(1)} s ` +
+        `in ${Math.round((performance.now() - st.since) / 1000)} s`);
+      st.net = st.netBytes = st.local = st.wait = 0;
+      st.since = performance.now();
+    }, 10000);
     return {
       size, last, key, store,
       // a block into this browser's store only (the bar)
-      fetchBlock: async (i) => { const c = await store; await c.put(key(i), new Response(await download(i))); },
+      fetchBlock: async (i) => {
+        const c = await store;
+        await c.put(key(i), new Response(await range(i * ISO_BLOCK, Math.min(size, (i + 1) * ISO_BLOCK) - 1)));
+      },
       slice: (a, b) => ({
         arrayBuffer: async () => {
           b = Math.min(b, size);
           if (b <= a) return new ArrayBuffer(0);
-          const first = Math.floor(a / ISO_BLOCK), end = Math.floor((b - 1) / ISO_BLOCK);
-          for (let i = end + 1; i <= Math.min(last, end + 2); i++) block(i).catch(() => {});  // ahead
-          const parts = await Promise.all(Array.from({length: end - first + 1}, (_, k) => block(first + k)));
+          const t0 = performance.now(), first = Math.floor(a / PIECE), end = Math.floor((b - 1) / PIECE);
+          let ok = true;
+          for (let p = first; p <= end; p++) if (!mem.has(p)) { ok = false; break; }
+          for (let k = 0; !ok && k < 3; k++) {  // (a piece pushed out of memory meanwhile: once more)
+            await get(first, end, a === lastEnd);
+            ok = true;
+            for (let p = first; p <= end; p++) if (!mem.has(p)) { ok = false; break; }
+          }
+          if (!ok) throw new Error('ISO: cannot read ' + a + '-' + b);
+          lastEnd = b;
           const out = new Uint8Array(b - a);
-          let o = 0;
-          parts.forEach((part, k) => {
-            const from = k === 0 ? a - first * ISO_BLOCK : 0, n = Math.min(part.length - from, b - a - o);
-            out.set(part.subarray(from, from + n), o);
+          for (let p = first, o = 0; p <= end; p++) {
+            const piece = mem.get(p), from = p === first ? a - first * PIECE : 0, n = Math.min(piece.length - from, b - a - o);
+            out.set(piece.subarray(from, from + n), o);
             o += n;
-          });
+          }
+          st.wait += performance.now() - t0;
           return out.buffer;
         },
       }),
@@ -856,7 +934,7 @@ if (!window.pangyaMobile) {
         if (store === undefined) store = keep && self.caches ? await caches.open('${TEX_CACHE}').catch(() => null) : null;
         let r = store && await store.match(url);
         if (!r) {
-          r = await fetch(url, {credentials: 'same-origin'});
+          r = await fetch(url, {credentials: 'same-origin', priority: 'low'});
           if (!r.ok) throw new Error('HTTP ' + r.status);
           if (store) store.put(url, r.clone()).catch(() => {});
         }
@@ -864,8 +942,15 @@ if (!window.pangyaMobile) {
         postMessage({id, out}, [out.buffer]);
       } catch (err) { postMessage({id, error: String(err && err.message || err)}); }
     };`;
-  const texWorkers = [], texWaiting = new Map();
-  let texSeq = 0;
+  const texWorkers = [], texWaiting = new Map(), texQueue = [];
+  let texSeq = 0, texRunning = 0;
+  function texPump() {  // the next pictures to the workers, while the disc isn't being read
+    while (texRunning < (TEX_GATE ? 2 : 12) && texQueue.length && (!TEX_GATE || !isoBusy)) {
+      const job = texQueue.shift();
+      texRunning++;
+      texWorkers[job.id % texWorkers.length].postMessage(job);
+    }
+  }
   Module.pangyaTexture = (url) => new Promise((resolve, reject) => {
     try {
       if (!texWorkers.length) {
@@ -875,6 +960,8 @@ if (!window.pangyaMobile) {
           w.onmessage = (e) => {
             const t = texWaiting.get(e.data.id);
             texWaiting.delete(e.data.id);
+            texRunning--;
+            texPump();
             if (t) e.data.error ? t.reject(new Error(e.data.error)) : t.resolve(e.data.out);
           };
           texWorkers.push(w);
@@ -888,7 +975,8 @@ if (!window.pangyaMobile) {
     }
     const id = ++texSeq;
     texWaiting.set(id, {resolve, reject});
-    texWorkers[id % texWorkers.length].postMessage({id, url: here(url), keep: KEEP});
+    texQueue.push({id, url: here(url), keep: KEEP});
+    texPump();
   });
 
   // The bar: the ISO's blocks, then the pack's pictures, into this browser's stores (whatever is

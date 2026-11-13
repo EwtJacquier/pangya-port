@@ -92,6 +92,10 @@
   #menu button.link { padding: 0 2px; border: 0; background: none; box-shadow: none; border-radius: 0; font-weight: normal;
     color: #1466c2; text-decoration: underline; }
   #menu button.link:hover { color: #0b4c95; }
+  #menu .vol { display: flex; align-items: center; gap: 6px; }
+  #menu .vol button { padding: 3px 10px; }
+  #menu .vol input[type=range] { width: 150px; accent-color: #1d82e0; cursor: pointer; }
+  #menu .vol .val { min-width: 40px; text-align: right; font-weight: bold; color: #1d4f86; }
   #menu .grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; }
   #menu .grid .row:nth-child(2) { border-top: 0; }
   @media (max-width: 560px) { #menu .grid { grid-template-columns: 1fr; } #menu .grid .row:nth-child(2) { border-top: 1px dotted #b9daf2; } }
@@ -329,6 +333,11 @@
     <h2>Player</h2>
     <div class="row"><span id="who">—</span><button id="switch">Switch player</button></div>
 
+    <h2>Sound</h2>
+    <div class="row"><span>Volume<br><span class="sub">Music, voices and sounds</span></span><div class="vol">
+      <button id="vol-down" aria-label="Lower">−</button><input type="range" id="vol" min="0" max="100" step="5" aria-label="Volume">
+      <span class="val" id="vol-val"></span><button id="vol-up" aria-label="Higher">+</button></div></div>
+
     <h2>Video</h2>
     <div class="row"><span>Fullscreen<br><span class="sub">Also F11 or double click</span></span><button id="fs">Enter</button></div>
     <div class="row"><span>Internal resolution<br><span class="sub">The PSP's 480x272 drawn this many times larger (lower: lighter for the computer)</span></span><div class="seg" id="scale"></div></div>
@@ -398,6 +407,7 @@ if (!window.pangyaMobile) {
       scale: [1, 2, 3, 4].includes(s.scale) ? s.scale : 4,  // the render scale
       texFilter: [0, 1, 2].includes(s.texFilter) ? s.texFilter : 0,  // the game's own textures: 0 smooth, 1 xBR, 2 pixels
       vt: s.vt !== false,  // vector text (a build with runtime/text.c): on unless the player turns it off
+      volume: Number.isFinite(s.volume) ? Math.min(100, Math.max(0, Math.round(s.volume))) : 30,  // percent of the game's own volume
     };
   }
   const settings = loadSettings();
@@ -423,6 +433,15 @@ if (!window.pangyaMobile) {
 
   function applyHd() {
     Module.pangyaHd = {on: settings.hd, dirty: true};
+  }
+  // The sound's volume (web/audio.js: a gain before the speakers), a share of the game's own.
+  function applyVolume() {
+    Module.pangyaVolume = settings.volume / 100;
+    if (Module.pangyaSetVolume) Module.pangyaSetVolume(Module.pangyaVolume);
+  }
+  function setVolume(v) {
+    settings.volume = Math.min(100, Math.max(0, Math.round(v)));
+    saveSettings(); applyVolume(); render();
   }
   // The render scale and the filter for the game's own textures (platform_web.c), while it runs.
   function applyVideo() {
@@ -474,6 +493,8 @@ if (!window.pangyaMobile) {
   function render() {
     const focusedIdx = [...menu.querySelectorAll('button')].indexOf(document.activeElement);
     document.getElementById('fs').textContent = document.fullscreenElement ? 'Leave' : 'Enter';
+    document.getElementById('vol').value = settings.volume;
+    document.getElementById('vol-val').textContent = settings.volume + '%';
     const toggles = [['hd', settings.hd], ['vt', settings.vt]];
     for (const [id, on] of toggles) {
       const b = document.getElementById(id);
@@ -557,6 +578,9 @@ if (!window.pangyaMobile) {
   document.getElementById('vt').addEventListener('click', () => {
     settings.vt = !settings.vt; saveSettings(); applyText(); render();
   });
+  document.getElementById('vol').addEventListener('input', (e) => setVolume(Number(e.target.value)));
+  document.getElementById('vol-down').addEventListener('click', () => setVolume(settings.volume - 10));
+  document.getElementById('vol-up').addEventListener('click', () => setVolume(settings.volume + 10));
   canvas.addEventListener('dblclick', toggleFullscreen);
 
   window.addEventListener('keydown', (e) => {
@@ -774,6 +798,7 @@ if (!window.pangyaMobile) {
   applyInput();
   applyHd();
   applyText();
+  applyVolume();
   function start() {
     if (!Module.ready || !Module.isoBlob || !Module.pangyaPreloaded || Module.started) return;
     Module.started = true;

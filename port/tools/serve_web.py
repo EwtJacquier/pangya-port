@@ -285,6 +285,12 @@ def main():
                     good_auth.add(h)
                     return True
                 time.sleep(1)  # a wrong password: slowly
+            # Which request asked (a second prompt comes from one that went without the password,
+            # or with one the server refused): never the password itself.
+            sys.stderr.write(f"401 {self.command} {self.path.split('?')[0][:80]} password={'refused' if h else 'none'} "
+                             f"dest={self.headers.get('Sec-Fetch-Dest', '-')} mode={self.headers.get('Sec-Fetch-Mode', '-')} "
+                             f"ua={self.headers.get('User-Agent', '-')[:70]}\n")
+            sys.stderr.flush()
             self.send_response(401)
             self.send_header("WWW-Authenticate", 'Basic realm="Pangya", charset="UTF-8"')
             self.send_header("Content-Length", "0")

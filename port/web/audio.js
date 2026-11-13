@@ -114,6 +114,11 @@ Module.pangyaAudioOpen = function () {
     return 0;
   }
   Module.pangyaAudio = ac;
+  // The page's volume (shell.html, its settings): a gain between the game's sound and the speakers.
+  const gain = ac.createGain();
+  gain.gain.value = Module.pangyaVolume ?? 1;
+  gain.connect(ac.destination);
+  Module.pangyaSetVolume = (v) => gain.gain.setTargetAtTime(v, ac.currentTime, 0.02);
   // Seconds from a pushed frame to the speaker: the FIFO's average level plus the browser's own.
   Module.pangyaAudioLatency = () => {
     const st = Module.pangyaAudioStats;
@@ -130,7 +135,7 @@ Module.pangyaAudioOpen = function () {
       fifo.pull(ev.outputBuffer.getChannelData(0), ev.outputBuffer.getChannelData(1));
       Module.pangyaAudioStats = { underruns: fifo.underruns, level: fifo.wr - fifo.rd, avg: Math.round(fifo.avg), target: fifo.target };
     };
-    node.connect(ac.destination);
+    node.connect(gain);
     Module.pangyaAudioNode = node;
     Module.pangyaAudioPush = (chunk) => {
       if (ac.state === 'running') fifo.push(chunk);
@@ -149,7 +154,7 @@ Module.pangyaAudioOpen = function () {
           outputChannelCount: [2],
           processorOptions: { targetMs: Number(new URLSearchParams(location.search).get('PANGYA_AUDIO_MS')) || 30 },
         });
-        node.connect(ac.destination);
+        node.connect(gain);
         node.port.onmessage = (e) => (Module.pangyaAudioStats = e.data);
         Module.pangyaAudioNode = node;
         Module.pangyaAudioPush = (chunk) => {

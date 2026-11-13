@@ -228,9 +228,9 @@ what the game reads), keeps the saves in the project folder and handles the play
   sign-in screen shows the game's title illustration, read from your ISO (in HD when the texture
   pack is installed).
 - **Esc** (or the gear in the corner, or Home on a gamepad) opens the settings: fullscreen (also
-  F11 or a double click), keys, gamepad buttons, internal resolution (1x to 4x), HD textures,
-  how the original textures are filtered (smooth, sharp or pixels) and the vector text (on by
-  default).
+  F11 or a double click), the volume (30% of the game's own by default), keys, gamepad buttons,
+  internal resolution (1x to 4x), HD textures, how the original textures are filtered (smooth,
+  sharp or pixels) and the vector text (on by default).
 - Without the server (the page opened some other way) the page asks for the ISO file and keeps
   the save in the browser.
 

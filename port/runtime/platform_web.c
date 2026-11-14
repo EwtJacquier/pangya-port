@@ -13,8 +13,8 @@ static EMSCRIPTEN_WEBGL_CONTEXT_HANDLE glctx;
 
 // Input. The page may preset Module.pangyaInput.keyMap (KeyboardEvent.code -> PSP button mask),
 // .keyAnalog (code -> [dx, dy] of the PSP analog stick), .padMap (standard-gamepad button index
-// -> mask) and .padStick (0 left stick, 2 right stick) from the player's settings; the menu edits
-// them live. Module.pangyaMenuOpen keeps keys and buttons away from the game.
+// -> mask) and .padStick (the PSP analog stick: 0 the left one, 2 the right one; the other one
+// works as the d-pad) from the player's settings; the menu edits them live. Module.pangyaMenuOpen keeps keys and buttons away from the game.
 EM_JS(void, js_input_init, (), {
 	const P = Module.pangyaInput || (Module.pangyaInput = {});
 	P.keys = new Set();
@@ -64,13 +64,19 @@ EM_JS(int, js_poll_buttons, (uint8_t *axes), {
 		for (const p of pads) {
 			if (!p) continue;
 			p.buttons.forEach((btn, i) => { if (btn.pressed && P.padMap[i]) b |= P.padMap[i]; });
-			const s = P.padStick || 0;
+			const s = P.padStick === 0 ? 0 : 2;
 			if (p.axes.length >= s + 2) {
 				const x = p.axes[s], y = p.axes[s + 1];
 				if (Math.hypot(x, y) > 0.15) {  // dead zone: a resting stick must not drift the spin
 					ax = Math.max(0, Math.min(255, Math.round((x + 1) * 127.5)));
 					ay = Math.max(0, Math.min(255, Math.round((y + 1) * 127.5)));
 				}
+			}
+			const d = s === 2 ? 0 : 2;  // the other stick works as the d-pad (PSP up 0x10, right 0x20, down 0x40, left 0x80)
+			if (p.axes.length >= d + 2) {
+				const x = p.axes[d], y = p.axes[d + 1];
+				if (x < -0.5) b |= 0x80; else if (x > 0.5) b |= 0x20;
+				if (y < -0.5) b |= 0x10; else if (y > 0.5) b |= 0x40;
 			}
 			break;
 		}

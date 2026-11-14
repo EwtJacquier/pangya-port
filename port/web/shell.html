@@ -351,7 +351,7 @@
 
     <h2>Gamepad <button class="link" id="pad-reset">Restore defaults</button></h2>
     <p class="hint" id="pad-name">No gamepad detected — press a button on it.</p>
-    <div class="row"><span>PSP analog stick<br><span class="sub">Ball spin and camera</span></span><div class="seg" id="stick"></div></div>
+    <div class="row"><span>PSP analog stick<br><span class="sub">Ball spin and camera; the other stick works as the d-pad</span></span><div class="seg" id="stick"></div></div>
     <div class="grid" id="pad"></div>
     </div>
   </div>
@@ -401,7 +401,9 @@ if (!window.pangyaMobile) {
     return {
       keys: Object.assign({}, DEFAULT_KEYS, s.keys || {}),
       pad: Object.assign({}, DEFAULT_PAD, s.pad || {}),
-      padStick: s.padStick === 2 ? 2 : 0,
+      // The PSP analog stick: the right one unless the player picks the left (kept as analogStick;
+      // the older padStick held the left one as the default, not as a choice).
+      padStick: s.analogStick === 'left' ? 0 : 2,
       // By default 4x with the HD textures (the game's own ones smooth).
       hd: s.hd !== false && !(s.texFilter > 0),  // the texture pack: on when there is one (not with sharp originals)
       scale: [1, 2, 3, 4].includes(s.scale) ? s.scale : 4,  // the render scale
@@ -413,6 +415,8 @@ if (!window.pangyaMobile) {
   const settings = loadSettings();
   function saveSettings() {
     const stored = Object.assign({}, settings);
+    stored.analogStick = settings.padStick === 0 ? 'left' : 'right';
+    delete stored.padStick;
     try { localStorage.setItem(STORE, JSON.stringify(stored)); } catch (e) { /* private mode: settings last this visit */ }
   }
   // What the game reads (see platform_web.c): code -> mask and pad index -> mask.
@@ -549,7 +553,7 @@ if (!window.pangyaMobile) {
     settings.keys = Object.assign({}, DEFAULT_KEYS); saveSettings(); applyInput(); render();
   });
   document.getElementById('pad-reset').addEventListener('click', () => {
-    settings.pad = Object.assign({}, DEFAULT_PAD); settings.padStick = 0; saveSettings(); applyInput(); render();
+    settings.pad = Object.assign({}, DEFAULT_PAD); settings.padStick = 2; saveSettings(); applyInput(); render();
   });
 
   // Fullscreen (F11, double click or the menu). The keyboard lock lets Esc reach the page there.
@@ -613,8 +617,9 @@ if (!window.pangyaMobile) {
     if (nameEl) nameEl.textContent = p ? 'Gamepad: ' + p.id : 'No gamepad detected — press a button on it.';
     if (p) {
       const now = p.buttons.map((b) => b.pressed);
-      if (p.axes.length >= 2) {  // the left stick also navigates the menu
-        now.up = p.axes[1] < -0.6; now.down = p.axes[1] > 0.6;
+      const dpadStick = settings.padStick === 2 ? 0 : 2;  // the stick that works as the d-pad also navigates the menu
+      if (p.axes.length >= dpadStick + 2) {
+        now.up = p.axes[dpadStick + 1] < -0.6; now.down = p.axes[dpadStick + 1] > 0.6;
       }
       const hit = (i) => now[i] && !prevPad[i];
       if (capture && capture.kind === 'pad') {

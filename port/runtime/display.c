@@ -153,6 +153,10 @@ static void dump_frame(unsigned long frame, const uint32_t *px, int w, int h) {
 
 void platform_vblank(void) {
 	unsigned long frame = (unsigned long)rt_vblank_count();
+	static uint64_t last_vblank;
+	uint64_t now_us = rt_now_us();
+	if (last_vblank) ge_hitch(now_us - last_vblank);
+	last_vblank = now_us;
 	audio_pump();
 	plat_poll(&buttons, &analog_x, &analog_y);
 	for (int i = 0; i < script_len; i++) {

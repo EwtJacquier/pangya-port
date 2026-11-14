@@ -19,6 +19,11 @@ WEAK const uint32_t *uitext_over(const uint32_t *px, int w, int h, int k, const 
 	(void)px, (void)w, (void)h, (void)k, (void)hd, (void)pw, (void)ph, (void)iw, (void)ih;
 	return NULL;
 }
+WEAK bool uitext_over_gl(const uint32_t *px, int w, int h, int k, const uint32_t *hd, int pw, int ph, int iw, int ih, unsigned tex) {
+	(void)px, (void)w, (void)h, (void)k, (void)hd, (void)pw, (void)ph, (void)iw, (void)ih, (void)tex;
+	return false;
+}
+
 WEAK bool uitext_hires_gl(const uint32_t *px, int w, int h, int k, unsigned tex) {
 	(void)px, (void)w, (void)h, (void)k, (void)tex;
 	return false;

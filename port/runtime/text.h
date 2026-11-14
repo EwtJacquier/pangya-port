@@ -41,6 +41,10 @@ const uint32_t *uitext_over(const uint32_t *px, int w, int h, int k, const uint3
 // texture unit 0); false if it isn't drawn. Changes GL state (the caller re-applies its own).
 bool uitext_hires_gl(const uint32_t *px, int w, int h, int k, unsigned tex);
 
+// uitext_over drawn by the GPU straight into the GL texture tex (as uitext_hires_gl); false if it
+// isn't (the CPU's uitext_over then).
+bool uitext_over_gl(const uint32_t *px, int w, int h, int k, const uint32_t *hd, int pw, int ph, int iw, int ih, unsigned tex);
+
 // px is an atlas drawn by uitext_hires: that wins over the texture pack.
 bool uitext_claims(const uint32_t *px, int w, int h);
 

@@ -131,6 +131,23 @@ other rows are whatever follows in memory). Textures the game rewrites frame aft
 font strings) are not looked up. A replacement is drawn with smooth filtering and the sprite clamp
 at its own resolution. `PANGYA_TEXPACK_LOG=1` logs every upload's key and every replacement.
 
+New screens without stutter (every change of screen, hole, shop or character brings tens of new
+textures, and each used to stop the game for a fifth of a second or more):
+- a texture of 512x512 may hold pictures of 78 sizes; the lookup hashed each size's corner (50 MB
+  for one texture). It now hashes each row once, joining every size's CRC-32 and Adler-32 as it
+  goes (zlib's combine), same keys (`PANGYA_TEXPACK_CHECK=1` runs the old way too and logs any
+  difference, `PANGYA_TEXPACK_SLOWFIND=1` only the old way);
+- a new texture shows at once as the game has it and is looked up afterwards, a few milliseconds'
+  worth a frame (its picture then arrives as any other), and what the pack has for each texture's
+  contents is remembered: a screen seen before costs nothing;
+- the words of the vector text over an HD picture are drawn by the GPU (`uitext_over_gl`: the
+  picture as the shader's background, the panels' old letters rebuilt there from a mask), as
+  without the pack; on the CPU at 4x they took 100–240 ms an atlas (`PANGYA_UITEXT_OVER_CPU=1`).
+`PANGYA_HITCH=ms` (also a URL parameter) logs every frame longer than that and where its time went:
+the textures' hashing, decoding and lookup, the pack's pictures read, the words drawn over them,
+the atlases redrawn, what went to the GPU. In the browser, `?guest=1` plays without an account
+(tests).
+
 ## Status
 
 - [x] Stage 1 — full translation: ~10,950 functions compile.

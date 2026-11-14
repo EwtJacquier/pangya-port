@@ -1119,6 +1119,36 @@ const uint32_t *uitext_hires(const uint32_t *px, int w, int h, int k) {
 static uint32_t *over_buf;
 static size_t over_cap;
 
+// Where a panel's old letters were (its mask, k times larger and a little wider: the upscaled
+// letters' edges), softened: 1 inside, falling to 0 over about k pixels (rw x rh = the panel at k).
+static float *panel_mask(const UiSprite *sp, int k) {
+	int rw = sp->w * k, rh = sp->h * k, grow = k / 2 > 0 ? k / 2 : 1, rad = k;
+	float *m = calloc((size_t)rw * rh, sizeof *m), *t = malloc(sizeof *t * (size_t)rw * rh);
+	for (int y = 0; y < rh; y++)
+		for (int x = 0; x < rw; x++) {
+			int mx = x / k - sp->mx, my = y / k - sp->my;
+			if (mx >= 0 && my >= 0 && mx < sp->mw && my < sp->mh && sp->mask[my * sp->mw + mx])
+				for (int dy = -grow; dy <= grow; dy++)
+					for (int dx = -grow; dx <= grow; dx++)
+						if (x + dx >= 0 && y + dy >= 0 && x + dx < rw && y + dy < rh) m[(size_t)(y + dy) * rw + x + dx] = 1;
+		}
+	for (int pass = 0; pass < 2; pass++) {  // a box blur, rows then columns: the soft edge
+		for (int y = 0; y < rh; y++)
+			for (int x = 0; x < rw; x++) {
+				float acc = 0;
+				int n = 0;
+				for (int d = -rad; d <= rad; d++) {
+					int xx = pass ? x : x + d, yy = pass ? y + d : y;
+					if (xx < 0 || yy < 0 || xx >= rw || yy >= rh) continue;
+					acc += (pass ? t : m)[(size_t)yy * rw + xx], n++;
+				}
+				(pass ? m : t)[(size_t)y * rw + x] = acc / (float)n;
+			}
+	}
+	free(t);
+	return m;
+}
+
 const uint32_t *uitext_over(const uint32_t *px, int w, int h, int k, const uint32_t *hd, int pw, int ph, int iw, int ih) {
 	UiAtlas *a = k >= 2 && hd && iw > 0 && ih > 0 ? ui_match(px, w, h) : NULL;
 	if (!a) return NULL;
@@ -1173,29 +1203,8 @@ const uint32_t *uitext_over(const uint32_t *px, int w, int h, int k, const uint3
 		upscale_smooth = true;
 		upscale_part(fixed, w, h, k, ui_rectmap(a, w, h), panel_buf, sp->x, sp->y, sp->x + sp->w, sp->y + sp->h);
 		upscale_smooth = false;
-		int rw = sp->w * k, rh = sp->h * k, grow = k / 2 > 0 ? k / 2 : 1, rad = k;
-		float *m = calloc((size_t)rw * rh, sizeof *m), *t = malloc(sizeof *t * (size_t)rw * rh);
-		for (int y = 0; y < rh; y++)
-			for (int x = 0; x < rw; x++) {
-				int mx = x / k - sp->mx, my = y / k - sp->my;
-				if (mx >= 0 && my >= 0 && mx < sp->mw && my < sp->mh && sp->mask[my * sp->mw + mx])
-					for (int dy = -grow; dy <= grow; dy++)
-						for (int dx = -grow; dx <= grow; dx++)
-							if (x + dx >= 0 && y + dy >= 0 && x + dx < rw && y + dy < rh) m[(size_t)(y + dy) * rw + x + dx] = 1;
-			}
-		for (int pass = 0; pass < 2; pass++) {  // a box blur, rows then columns: the soft edge
-			for (int y = 0; y < rh; y++)
-				for (int x = 0; x < rw; x++) {
-					float acc = 0;
-					int n = 0;
-					for (int d = -rad; d <= rad; d++) {
-						int xx = pass ? x : x + d, yy = pass ? y + d : y;
-						if (xx < 0 || yy < 0 || xx >= rw || yy >= rh) continue;
-						acc += (pass ? t : m)[(size_t)yy * rw + xx], n++;
-					}
-					(pass ? m : t)[(size_t)y * rw + x] = acc / (float)n;
-				}
-		}
+		int rw = sp->w * k, rh = sp->h * k;
+		float *m = panel_mask(sp, k);
 		for (int y = 0; y < rh; y++)
 			for (int x = 0; x < rw; x++) {
 				float f = m[(size_t)y * rw + x] * 2.f;  // fully the rebuilt background inside the letters' area
@@ -1210,7 +1219,6 @@ const uint32_t *uitext_over(const uint32_t *px, int w, int h, int k, const uint3
 				over_buf[i] = o;
 			}
 		free(m);
-		free(t);
 	}
 	for (int j = 0; j < a->n; j++)
 		if (a->s[j].x + a->s[j].w <= w && a->s[j].y + a->s[j].h <= h) draw_sprite(over_buf, W, H, &a->s[j], k, px, w, h);
@@ -1242,10 +1250,10 @@ typedef struct {
 
 static SdfGlyph *sdf_g;
 static int sdf_n, sdf_index[2][256];  // index + 1 for codes < 256
-static GLuint gl_prog, gl_vao, gl_fbo, gl_sdf, gl_src, gl_data, gl_rect;
+static GLuint gl_prog, gl_vao, gl_fbo, gl_sdf, gl_src, gl_data, gl_rect, gl_hd, gl_pmask;
 static int gl_state;  // 0 not tried, 1 ready, -1 unavailable
 static GLint u_base, u_k, u_srcSize, u_mode, u_first, u_count, u_bold, u_ringTotal, u_ext, u_nrings, u_rw, u_rc, u_ftop, u_fbot,
-	u_edge, u_fill, u_rectBot, u_rows, u_my, u_quad, u_view, u_useRect;
+	u_edge, u_fill, u_rectBot, u_rows, u_my, u_quad, u_view, u_useRect, u_hdScale, u_useMask;
 
 static const SdfGlyph *sdf_find(int font, int code) {
 	if (code < 256) return sdf_index[font][code] ? &sdf_g[sdf_index[font][code] - 1] : NULL;
@@ -1356,7 +1364,11 @@ static const char *UI_FS =
 	"uniform highp usampler2D u_rect;\n"  // per texel of the atlas, its sprite: x0 y0 x1 y1 (u_useRect)
 	"uniform int u_useRect;\n"
 	"uniform highp sampler2D u_data;\n"  // glyph records: texel 0 the glyph's box in u_sdf, texel 1 the map from target pixels to it
-	"uniform int u_base;\n"  // the background: 0 Catmull-Rom, 1 xBR, 2 its own pixels (ge.c's filter for the game's textures)
+	"uniform int u_base;\n"  // the background: 0 Catmull-Rom, 1 xBR, 2 its own pixels (ge.c's filter for the game's textures), 3 the pack's picture
+	"uniform highp sampler2D u_hd;\n"  // the pack's picture (u_base 3), u_hdScale of its pixels per texel of the atlas
+	"uniform vec2 u_hdScale;\n"
+	"uniform highp sampler2D u_pmask;\n"  // over it (u_useMask): 1 where a panel's old letters were, per texel of the atlas
+	"uniform int u_useMask;\n"
 	"uniform int u_k, u_mode, u_first, u_count, u_ext, u_nrings;\n"  // mode: 0 upscale, 1 text replacing the rectangle, 2 over a panel, 3 clearing only near the letters, 4 the same to the background's color (sprite_backdrop)
 	"uniform ivec2 u_srcSize;\n"
 	"uniform float u_bold, u_ringTotal, u_my;\n"
@@ -1413,17 +1425,10 @@ static const char *UI_FS =
 	"  vec4 d1 = abs(E - r1c), d2 = abs(E - r2c);\n"
 	"  return dot(d1, vec4(1.0)) >= dot(d2, vec4(1.0)) ? r1c : r2c;\n"
 	"}\n"
-	"vec4 upscaled(ivec2 P) {\n"  // Catmull-Rom on premultiplied colors, within the texel's sprite
+	"vec4 crUp(ivec2 P, ivec2 lo, ivec2 hi) {\n"  // Catmull-Rom on premultiplied colors, within lo..hi
 	"  vec2 f = (vec2(P) + 0.5) / float(u_k) - 0.5;\n"
 	"  vec2 b = floor(f);\n"
 	"  f -= b;\n"
-	"  ivec2 lo = ivec2(0), hi = u_srcSize - 1;\n"
-	"  if (u_useRect == 1) {\n"
-	"    uvec4 r = texelFetch(u_rect, P / u_k, 0);\n"
-	"    if (r.z > r.x) { lo = ivec2(r.xy); hi = ivec2(r.zw) - 1; }\n"
-	"  }\n"
-	"  if (u_base == 2) return texelFetch(u_src, clamp(P / u_k, lo, hi), 0);\n"
-	"  if (u_base == 1) { xlo = lo; xhi = hi; return xbrUp((vec2(P) + 0.5) / float(u_k)); }\n"
 	"  vec4 wx = cr(f.x), wy = cr(f.y), acc = vec4(0.0);\n"
 	"  for (int j = 0; j < 4; j++) {\n"
 	"    int yy = clamp(int(b.y) - 1 + j, lo.y, hi.y);\n"
@@ -1436,6 +1441,28 @@ static const char *UI_FS =
 	"  }\n"
 	"  float a = clamp(acc.a, 0.0, 1.0);\n"
 	"  return vec4(a > 0.0 ? clamp(acc.rgb / a, 0.0, 1.0) : vec3(0.0), a);\n"
+	"}\n"
+	"vec4 upscaled(ivec2 P) {\n"  // the background at P, within the texel's sprite
+	"  ivec2 lo = ivec2(0), hi = u_srcSize - 1;\n"
+	"  if (u_useRect == 1) {\n"
+	"    uvec4 r = texelFetch(u_rect, P / u_k, 0);\n"
+	"    if (r.z > r.x) { lo = ivec2(r.xy); hi = ivec2(r.zw) - 1; }\n"
+	"  }\n"
+	"  if (u_base == 3) {\n"  // the pack's picture; where a panel's old letters were, the atlas rebuilt without them
+	"    vec2 t = (vec2(P) + 0.5) / float(u_k);\n"  // in the atlas's texels
+	"    vec4 c = texture(u_hd, t * u_hdScale / vec2(textureSize(u_hd, 0)));\n"
+	"    if (u_useMask == 1) {\n"  // the letters' mask, softened over a texel or so (uitext_over's panel_mask)
+	"      vec2 ms = vec2(textureSize(u_pmask, 0));\n"
+	"      float v = 0.25 * (texture(u_pmask, (t + vec2(-0.5, -0.5)) / ms).r + texture(u_pmask, (t + vec2(0.5, -0.5)) / ms).r +\n"
+	"                        texture(u_pmask, (t + vec2(-0.5, 0.5)) / ms).r + texture(u_pmask, (t + vec2(0.5, 0.5)) / ms).r);\n"
+	"      float f = min(1.0, 2.0 * v);\n"
+	"      if (f > 0.0) c = mix(c, crUp(P, lo, hi), f);\n"
+	"    }\n"
+	"    return c;\n"
+	"  }\n"
+	"  if (u_base == 2) return texelFetch(u_src, clamp(P / u_k, lo, hi), 0);\n"
+	"  if (u_base == 1) { xlo = lo; xhi = hi; return xbrUp((vec2(P) + 0.5) / float(u_k)); }\n"
+	"  return crUp(P, lo, hi);\n"
 	"}\n"
 	"vec4 over(vec4 d, vec4 s, float a) {\n"
 	"  float sa = a * s.a;\n"
@@ -1544,13 +1571,15 @@ static bool gl_ready(void) {
 	if (!sdf_build()) return false;
 #define U(n) n = glGetUniformLocation(gl_prog, #n)
 	U(u_base); U(u_k); U(u_srcSize); U(u_mode); U(u_first); U(u_count); U(u_bold); U(u_ringTotal); U(u_ext); U(u_nrings);
-	U(u_rw); U(u_rc); U(u_ftop); U(u_fbot); U(u_edge); U(u_fill); U(u_rectBot); U(u_rows); U(u_my); U(u_quad); U(u_view); U(u_useRect);
+	U(u_rw); U(u_rc); U(u_ftop); U(u_fbot); U(u_edge); U(u_fill); U(u_rectBot); U(u_rows); U(u_my); U(u_quad); U(u_view); U(u_useRect); U(u_hdScale); U(u_useMask);
 #undef U
 	glUseProgram(gl_prog);
 	glUniform1i(glGetUniformLocation(gl_prog, "u_src"), 1);
 	glUniform1i(glGetUniformLocation(gl_prog, "u_sdf"), 2);
 	glUniform1i(glGetUniformLocation(gl_prog, "u_data"), 3);
 	glUniform1i(glGetUniformLocation(gl_prog, "u_rect"), 4);
+	glUniform1i(glGetUniformLocation(gl_prog, "u_hd"), 5);
+	glUniform1i(glGetUniformLocation(gl_prog, "u_pmask"), 6);
 	glGenVertexArrays(1, &gl_vao);
 	glGenFramebuffers(1, &gl_fbo);
 	glGenTextures(1, &gl_src);
@@ -1561,6 +1590,16 @@ static bool gl_ready(void) {
 		glBindTexture(GL_TEXTURE_2D, nearest[i]);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	}
+	GLuint smooth[2] = {gl_hd, gl_pmask};  // the pack's picture, the panels' mask: sampled smoothly, edges repeated
+	glGenTextures(2, smooth);
+	gl_hd = smooth[0], gl_pmask = smooth[1];
+	for (int i = 0; i < 2; i++) {
+		glBindTexture(GL_TEXTURE_2D, smooth[i]);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	}
 	gl_state = 1;
 	return true;
@@ -1624,9 +1663,66 @@ static SpriteRun layout_sprite(const UiSprite *s, int k, float **rec, int *nrec,
 	return r;
 }
 
+static bool atlas_gl(UiAtlas *a, const uint32_t *px, int w, int h, int k, unsigned tex, int hd_scale);
+static bool hd_mask;  // uitext_over_gl: the panels' mask is in gl_pmask
+
 bool uitext_hires_gl(const uint32_t *px, int w, int h, int k, unsigned tex) {
 	UiAtlas *a = k >= 2 ? ui_match(px, w, h) : NULL;
 	if (!a || !gl_ready()) return false;
+	return atlas_gl(a, px, w, h, k, tex, 0);
+}
+
+// The same over the pack's picture (hd: pw x ph pixels for the iw x ih texels of the w x h atlas,
+// hd_scale = pw / iw of them per texel): what uitext_over makes on the CPU, here on the GPU. The
+// picture goes up as it is, with a mask of the panels' old letters (a byte a texel); the shader
+// takes the picture as the background (u_base 3), the atlas rebuilt without those letters where
+// the mask says (softened as uitext_over's panel_mask), and draws every sprite over it. A new
+// screen's atlases took a fifth of a second each on the CPU (the words drawn at 4x): the screen
+// froze at every change.
+bool uitext_over_gl(const uint32_t *px, int w, int h, int k, const uint32_t *hd, int pw, int ph, int iw, int ih, unsigned tex) {
+	static int cpu = -1;  // PANGYA_UITEXT_OVER_CPU=1 (tests): uitext_over on the CPU, as before
+	if (cpu < 0) cpu = getenv("PANGYA_UITEXT_OVER_CPU") != NULL;
+	UiAtlas *a = !cpu && k >= 2 && hd && iw > 0 && ih > 0 ? ui_match(px, w, h) : NULL;
+	if (!a || !gl_ready()) return false;
+	int sc = pw / iw;
+	if (sc < 1 || sc > 8 || pw != iw * sc || ph != ih * sc) return false;
+	uint64_t t0 = rt_now_us();
+	glActiveTexture(GL_TEXTURE5);
+	glBindTexture(GL_TEXTURE_2D, gl_hd);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, pw, ph, 0, GL_RGBA, GL_UNSIGNED_BYTE, hd);
+	// The panels' letters, one byte a texel of the atlas (the shader rebuilds the background there).
+	static uint8_t *mask;
+	static size_t mask_cap;
+	if ((size_t)w * h > mask_cap) mask_cap = (size_t)w * h, mask = realloc(mask, mask_cap);
+	memset(mask, 0, (size_t)w * h);
+	bool any = false;
+	for (int j = 0; j < a->n; j++) {
+		const UiSprite *sp = &a->s[j];
+		if (!sp->panel || !sp->mask || sp->x + sp->w > w || sp->y + sp->h > h) continue;
+		for (int my = 0; my < sp->mh; my++)
+			for (int mx = 0; mx < sp->mw; mx++) {
+				int x = sp->x + sp->mx + mx, y = sp->y + sp->my + my;
+				if (sp->mask[my * sp->mw + mx] && x >= sp->x && y >= sp->y && x < sp->x + sp->w && y < sp->y + sp->h)
+					mask[(size_t)y * w + x] = 255, any = true;
+			}
+	}
+	glActiveTexture(GL_TEXTURE6);
+	glBindTexture(GL_TEXTURE_2D, gl_pmask);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, any ? w : 1, any ? h : 1, 0, GL_RED, GL_UNSIGNED_BYTE, mask);
+	hd_mask = any;
+	uint64_t t_base = rt_now_us();
+	bool ok = atlas_gl(a, px, w, h, k, tex, sc);
+	if (ok) {
+		static int logged;
+		if (logged++ < 40 || getenv("PANGYA_UITEXT_DEBUG"))
+			rt_log("text: %s over the pack's picture by the GPU at %dx (%.1f ms: picture and mask %.1f)", a->name, k,
+			       (rt_now_us() - t0) / 1e3, (t_base - t0) / 1e3);
+	}
+	return ok;
+}
+
+static bool atlas_gl(UiAtlas *a, const uint32_t *px, int w, int h, int k, unsigned tex, int hd_scale) {
 	static int clears = 4;
 	if (clears > 0)
 		for (clears--; glGetError() != GL_NO_ERROR;) {}  // not ours
@@ -1677,7 +1773,9 @@ bool uitext_hires_gl(const uint32_t *px, int w, int h, int k, unsigned tex) {
 		glUseProgram(gl_prog);
 		glBindVertexArray(gl_vao);
 		glUniform1i(u_k, k);
-		glUniform1i(u_base, ge_tex_filter());
+		glUniform1i(u_base, hd_scale ? 3 : ge_tex_filter());
+		glUniform2f(u_hdScale, (float)hd_scale, (float)hd_scale);
+		glUniform1i(u_useMask, hd_scale && hd_mask);
 		glUniform1i(u_useRect, rmap != NULL);
 		glUniform2i(u_srcSize, w, h);
 		glUniform2f(u_view, (float)W, (float)H);
@@ -1742,7 +1840,7 @@ bool uitext_hires_gl(const uint32_t *px, int w, int h, int k, unsigned tex) {
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, tex);
 	free(runs);
-	if (ok) {
+	if (ok && !hd_scale) {
 		static int logged;
 		if (logged++ < 40 || getenv("PANGYA_UITEXT_DEBUG"))
 			rt_log("text: %s drawn by the GPU at %dx with %d sprites (%.1f ms: inpainting %.1f, layout %.1f)", a->name, k,

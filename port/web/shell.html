@@ -709,7 +709,7 @@ if (!window.pangyaMobile) {
       dressLogin();
     };
     const saved = readSession();
-    if (saved && saved.guest) return done(null);
+    if ((saved && saved.guest) || new URLSearchParams(location.search).get('guest') === '1') return done(null);  // ?guest=1: tests
     fetch('account/me', {headers: saved && saved.token ? {'X-Pangya-Session': saved.token} : {}}).then((r) => {
       if (r.ok) return r.json().then((j) => done({name: j.name, token: saved.token}));
       if (r.status === 401) return ask();

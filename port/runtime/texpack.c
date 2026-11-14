@@ -87,6 +87,47 @@ uint64_t texpack_hash(const void *p, size_t n) {
 	return (uint64_t)crc_update(0, p, n) << 32 | adler_update(1, p, n);
 }
 
+// CRC-32 and Adler-32 of two pieces put together from each one's (zlib's crc32_combine_op and
+// adler32_combine): a picture's key for every one of its possible sizes from a single pass.
+static uint32_t multmodp(uint32_t a, uint32_t b) {  // a * b modulo the CRC's polynomial (reflected)
+	uint32_t m = 1u << 31, p = 0;
+	for (;;) {
+		if (a & m) {
+			p ^= b;
+			if ((a & (m - 1)) == 0) break;
+		}
+		m >>= 1;
+		b = b & 1 ? (b >> 1) ^ 0xEDB88320u : b >> 1;
+	}
+	return p;
+}
+
+static uint32_t crc_shift_op(size_t len) {  // x^(8 len) modulo the polynomial: appending len bytes
+	static uint32_t x2n[32];
+	if (!x2n[0]) {
+		uint32_t p = 1u << 30;  // x^1
+		x2n[0] = p;
+		for (int n = 1; n < 32; n++) x2n[n] = p = multmodp(p, p);
+	}
+	uint32_t p = 1u << 31;  // x^0
+	unsigned k = 3;
+	for (size_t n = len; n; n >>= 1, k++)
+		if (n & 1) p = multmodp(x2n[k & 31], p);
+	return p;
+}
+
+static uint32_t adler_combine(uint32_t a1, uint32_t a2, size_t len2) {
+	const uint32_t BASE = 65521;
+	uint32_t rem = (uint32_t)(len2 % BASE), sum1 = a1 & 0xffff, sum2 = (uint32_t)(((uint64_t)rem * sum1) % BASE);
+	sum1 += (a2 & 0xffff) + BASE - 1;
+	sum2 += ((a1 >> 16) & 0xffff) + ((a2 >> 16) & 0xffff) + BASE - rem;
+	if (sum1 >= BASE) sum1 -= BASE;
+	if (sum1 >= BASE) sum1 -= BASE;
+	if (sum2 >= (BASE << 1)) sum2 -= BASE << 1;
+	if (sum2 >= BASE) sum2 -= BASE;
+	return sum1 | sum2 << 16;
+}
+
 // ---- index ------------------------------------------------------------------------------------------
 static int log2i(int v) {
 	int n = 0;
@@ -180,10 +221,8 @@ bool texpack_set_enabled(bool on) {
 	return true;
 }
 
-int texpack_find(const uint32_t *px, int w, int h) {
-	if (!enabled || !nents) return -1;
+static int find_slow(const uint32_t *px, int w, int h) {  // a key for each possible size, one by one
 	int lw = log2i(w), lh = log2i(h);
-	if (lw > 10 || lh > 10) return -1;
 	for (int k = 0; k < nsizes[lw][lh]; k++) {
 		Size s = sizes[lw][lh][k];
 		if (s.iw > w || s.ih > h) continue;
@@ -192,6 +231,72 @@ int texpack_find(const uint32_t *px, int w, int h) {
 		if (e) return (int)(e - ents);
 	}
 	return -1;
+}
+
+// The pictures a texture of this size may hold come in up to 78 sizes (a 512x512 texture), and the
+// key of each one hashed its own corner: 50 MB hashed for a new texture, a fifth of a second (more
+// in the browser), every texture a new screen brought. Now each row is hashed once: as the pass
+// along it reaches each possible width, the row's CRC and Adler so far (crc_update and
+// adler_update go on from where they stopped) join that width's key, combined (zlib's way), and
+// at each possible height the key is looked up.
+int texpack_find(const uint32_t *px, int w, int h) {
+	if (!enabled || !nents) return -1;
+	int lw = log2i(w), lh = log2i(h);
+	if (lw > 10 || lh > 10 || !nsizes[lw][lh]) return -1;
+	static int check = -1;  // PANGYA_TEXPACK_CHECK=1 (tests): the old way too, and say when they differ
+	if (check < 0) check = getenv("PANGYA_TEXPACK_CHECK") != NULL;
+	static int slow = -1;  // PANGYA_TEXPACK_SLOWFIND=1 (tests): only the old way
+	if (slow < 0) slow = getenv("PANGYA_TEXPACK_SLOWFIND") != NULL;
+	if (slow) return find_slow(px, w, h);
+	const Size *sz = sizes[lw][lh];
+	int n = nsizes[lw][lh];
+	// the distinct widths (sorted) and, for each size, its width's place
+	uint16_t widths[256];
+	int nw = 0, maxh = 0;
+	for (int k = 0; k < n; k++) {
+		if (sz[k].iw > w || sz[k].ih > h) continue;
+		int i = 0;
+		while (i < nw && widths[i] < sz[k].iw) i++;
+		if (i < nw && widths[i] == sz[k].iw) continue;
+		if (nw == 256) return find_slow(px, w, h);
+		memmove(widths + i + 1, widths + i, sizeof *widths * (size_t)(nw - i));
+		widths[i] = sz[k].iw, nw++;
+	}
+	for (int k = 0; k < n; k++)
+		if (sz[k].iw <= w && sz[k].ih <= h && sz[k].ih > maxh) maxh = sz[k].ih;
+	uint32_t ops[256], kc[256], ka[256];
+	for (int i = 0; i < nw; i++) ops[i] = crc_shift_op((size_t)widths[i] * 4), kc[i] = 0, ka[i] = 1;
+	int found = -1;
+	for (int y = 0; y < maxh && found < 0; y++) {
+		const uint8_t *row = (const uint8_t *)(px + (size_t)y * w);
+		uint32_t rc = 0, ra = 1;
+		int at = 0;
+		for (int i = 0; i < nw; i++) {
+			size_t len = (size_t)(widths[i] - at) * 4;
+			rc = crc_update(rc, row + (size_t)at * 4, len);
+			ra = adler_update(ra, row + (size_t)at * 4, len);
+			at = widths[i];
+			kc[i] = multmodp(ops[i], kc[i]) ^ rc;
+			ka[i] = adler_combine(ka[i], ra, (size_t)widths[i] * 4);
+		}
+		for (int k = 0; k < n && found < 0; k++) {  // the sizes this many rows tall
+			if (sz[k].ih != y + 1 || sz[k].iw > w) continue;
+			int i = 0;
+			while (widths[i] != sz[k].iw) i++;
+			Entry probe = {.key = (uint64_t)kc[i] << 32 | ka[i], .iw = sz[k].iw, .ih = sz[k].ih};
+			Entry *e = bsearch(&probe, ents, (size_t)nents, sizeof(Entry), cmp_entry);
+			if (e) found = (int)(e - ents);
+		}
+	}
+	if (check) {
+		int slow = find_slow(px, w, h);
+		if (slow != found) rt_log("texpack: CHECK %dx%d texture: one pass found %d, one by one %d", w, h, found, slow);
+		else {
+			static int ok;
+			if (++ok % 10 == 0) rt_log("texpack: CHECK %d lookups agree (last: %dx%d, %s)", ok, w, h, found >= 0 ? "found" : "none");
+		}
+	}
+	return found;
 }
 
 // ---- QOI ---------------------------------------------------------------------------------------------

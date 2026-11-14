@@ -98,6 +98,9 @@ typedef struct {
 	bool mips;         // a replacement with its mipmaps (sampled smoothly when it shows smaller)
 	uint64_t pack_frame, changed_frame;
 	uint8_t changes;   // contents replaced in consecutive frames (movies): not looked up
+	uint32_t *look;    // its pixels while the pack is still to be looked up for them (look_poll)
+	uint64_t look_key; // ... their content (the memo's key) and whether text.h redraws them
+	bool look_claimed;
 } TexEntry;
 #define MAX_TEX 512
 static TexEntry texcache[MAX_TEX];
@@ -629,6 +632,27 @@ static bool tex_from_fbo;  // the last texture_get returned a render target
 static float tex_scale;    // ... or a texture this many times finer than the GE's (TexEntry.scale)
 static bool tex_mips;      // ... with its mipmaps (TexEntry.mips)
 
+// Where a slow frame's time went (PANGYA_HITCH=ms logs every frame longer than that): the
+// textures' first upload, the pack's pictures read, the words drawn over them (uitext_over), the
+// atlases redrawn (text.h), what went to the GPU and the mipmaps made there.
+static struct {
+	uint64_t tex, read, over, vec, gpu, mip, poll, hash, dec, find;
+	int n_new, n_pack;
+} prof;
+#define TIMED(field, expr) ({ uint64_t t_ = rt_now_us(); __typeof__(expr) r_ = (expr); prof.field += rt_now_us() - t_; r_; })
+#define TIMED_DO(field, stmt) do { uint64_t t_ = rt_now_us(); stmt; prof.field += rt_now_us() - t_; } while (0)
+
+void ge_hitch(uint64_t frame_us) {
+	static int ms = -1;
+	if (ms < 0) ms = getenv("PANGYA_HITCH") ? atoi(getenv("PANGYA_HITCH")) : 0;
+	if (ms > 0 && frame_us >= (uint64_t)ms * 1000)
+		rt_log("hitch: %.1f ms | textures %.1f (%d new: hashing %.1f, decoding %.1f, looking up %.1f), pack read %.1f, words over %.1f, "
+		       "atlases %.1f, to the GPU %.1f, mipmaps %.1f (%d pictures, poll %.1f)",
+		       frame_us / 1e3, prof.tex / 1e3, prof.n_new, prof.hash / 1e3, prof.dec / 1e3, prof.find / 1e3, prof.read / 1e3, prof.over / 1e3,
+		       prof.vec / 1e3, prof.gpu / 1e3, prof.mip / 1e3, prof.n_pack, prof.poll / 1e3);
+	memset(&prof, 0, sizeof prof);
+}
+
 // A replacement texture (pw x ph for the iw x ih texels of a w x h texture) into e->tex at its own
 // scale; texels past the picture repeat its last column and row. False if the GPU can't hold it.
 static bool pack_upload(TexEntry *e, const uint32_t *px, int pw, int ph, int iw, int ih, int w, int h) {
@@ -648,10 +672,11 @@ static bool pack_upload(TexEntry *e, const uint32_t *px, int pw, int ph, int iw,
 	}
 	if (!e->tex) glGenTextures(1, &e->tex);
 	glBindTexture(GL_TEXTURE_2D, e->tex);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, full ? full : px);
+	TIMED_DO(gpu, glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, full ? full : px));
 	// Shown smaller than its own size (3D billboards, far sprites), a 4x picture sampled without
 	// mipmaps skips texels: thin outlines come and go letter by letter.
-	glGenerateMipmap(GL_TEXTURE_2D);
+	TIMED_DO(mip, glGenerateMipmap(GL_TEXTURE_2D));
+	prof.n_pack++;
 	gl_invalidate();
 	free(full);
 	e->scale = (float)s;
@@ -664,7 +689,9 @@ static bool pack_upload(TexEntry *e, const uint32_t *px, int pw, int ph, int iw,
 // asks for many at once: past PACK_FRAME_US in a frame, the rest wait for the next frames (their
 // originals show until then) instead of holding this one up.
 #define PACK_FRAME_US 6000
-static void pack_poll(TexEntry *e) {
+static void pack_poll_(TexEntry *e);
+static void pack_poll(TexEntry *e) { TIMED_DO(poll, pack_poll_(e)); }
+static void pack_poll_(TexEntry *e) {
 	static uint64_t spent_frame, spent_us;
 	if (e->pack_frame == frame_no) return;
 	if (spent_frame != frame_no) spent_frame = frame_no, spent_us = 0;
@@ -673,17 +700,21 @@ static void pack_poll(TexEntry *e) {
 	uint64_t t0 = rt_now_us();
 	int pw, ph, iw, ih;
 	bool failed;
-	uint32_t *px = texpack_load(e->pack1 - 1, &pw, &ph, &iw, &ih, &failed);
+	uint32_t *px = TIMED(read, texpack_load(e->pack1 - 1, &pw, &ph, &iw, &ih, &failed));
 	if (!px) {
 		if (failed) e->pack1 = 0, free(e->ui_orig), e->ui_orig = NULL;
 		return;
 	}
 	uint64_t t1 = rt_now_us();
 	batch_flush();  // queued draws still show the original
-	const uint32_t *over = e->ui_orig ? uitext_over(e->ui_orig, e->w, e->h, rs, px, pw, ph, iw, ih) : NULL;
-	if (over) {  // a UI atlas: the picture with text.h's words over it
+	// a UI atlas: the picture with text.h's words over it, drawn by the GPU (else the CPU's)
+	if (e->ui_orig && !e->tex) glGenTextures(1, &e->tex);
+	bool gl = e->ui_orig && TIMED(over, uitext_over_gl(e->ui_orig, e->w, e->h, rs, px, pw, ph, iw, ih, e->tex));
+	const uint32_t *over = e->ui_orig && !gl ? TIMED(over, uitext_over(e->ui_orig, e->w, e->h, rs, px, pw, ph, iw, ih)) : NULL;
+	if (gl || over) {
 		glBindTexture(GL_TEXTURE_2D, e->tex);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, e->w * rs, e->h * rs, 0, GL_RGBA, GL_UNSIGNED_BYTE, over);
+		if (over) TIMED_DO(gpu, glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, e->w * rs, e->h * rs, 0, GL_RGBA, GL_UNSIGNED_BYTE, over));
+		prof.n_pack++;
 		gl_invalidate();
 		e->scale = (float)rs;
 		e->mips = false;
@@ -702,7 +733,58 @@ static void pack_poll(TexEntry *e) {
 		rt_log("texpack: %dx%d in %.1f ms (read %.1f, to the GPU %.1f)", pw, ph, (t2 - t0) / 1000.0, (t1 - t0) / 1000.0, (t2 - t1) / 1000.0);
 }
 
-static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {
+// What the pack has for a texture's contents, once looked up: a texture that comes back (the same
+// screen again, the next hole's things, a shot's effects) is not looked up again.
+#define MEMO_N 8192
+static struct {
+	uint64_t key;  // 0: empty
+	int pk;        // the pack's entry, -1 none
+	bool claimed;  // a UI atlas text.h redraws
+} memo[MEMO_N];
+static bool memo_get(uint64_t k, int *pk, bool *claimed) {
+	k |= 1;
+	for (uint32_t i = (uint32_t)(k ^ k >> 29) % MEMO_N, n = 0; n < 32; i = (i + 1) % MEMO_N, n++) {
+		if (!memo[i].key) return false;
+		if (memo[i].key == k) return *pk = memo[i].pk, *claimed = memo[i].claimed, true;
+	}
+	return false;
+}
+static void memo_put(uint64_t k, int pk, bool claimed) {
+	k |= 1;
+	for (uint32_t i = (uint32_t)(k ^ k >> 29) % MEMO_N, n = 0; n < 32; i = (i + 1) % MEMO_N, n++)
+		if (!memo[i].key || memo[i].key == k) {
+			memo[i].key = k, memo[i].pk = pk, memo[i].claimed = claimed;
+			return;
+		}
+	memo[(uint32_t)(k ^ k >> 29) % MEMO_N].key = k;  // full there: the newest wins
+	memo[(uint32_t)(k ^ k >> 29) % MEMO_N].pk = pk;
+	memo[(uint32_t)(k ^ k >> 29) % MEMO_N].claimed = claimed;
+}
+
+// A new texture shows at once as the game has it (or its words redrawn) and its pack picture is
+// looked up afterwards, a few milliseconds' worth a frame: a new screen brings tens of textures,
+// and their lookups in the frame they came in held it up (a stutter at every change). The picture
+// then comes as any other (pack_poll).
+#define LOOK_FRAME_US 4000
+static void look_poll(TexEntry *e) {
+	static uint64_t frame, spent;
+	if (frame != frame_no) frame = frame_no, spent = 0;
+	if (spent >= LOOK_FRAME_US) return;
+	uint64_t t0 = rt_now_us();
+	int pk = TIMED(find, texpack_find(e->look, e->w, e->h));
+	memo_put(e->look_key, pk, e->look_claimed);
+	if (pk >= 0) {
+		e->pack1 = pk + 1;
+		if (e->look_claimed) e->ui_orig = e->look, e->look = NULL;  // pack_poll draws the words over the picture
+	}
+	free(e->look);
+	e->look = NULL;
+	spent += rt_now_us() - t0;
+}
+
+static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy);
+static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) { return TIMED(tex, texture_get_(tw, th, uvsx, uvsy)); }
+static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy) {
 	uint32_t addr = ((reg[0xA8] & 0x0F0000u) << 8) | (reg[0xA0] & 0xFFFFFFu);
 	int stride = (int)(reg[0xA8] & 0x7FF);
 	int w = 1 << (reg[0xB8] & 0xF), h = 1 << ((reg[0xB8] >> 8) & 0xF);
@@ -774,6 +856,7 @@ static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {
 	if (last_slot >= 0) {
 		TexEntry *e = &texcache[last_slot];
 		if (e->tex && e->key == key && e->checked == frame_no) {
+			if (e->look) look_poll(e);
 			if (e->pack1) pack_poll(e);
 			e->last_use = frame_no;
 			tex_scale = e->scale;
@@ -787,6 +870,7 @@ static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {
 		TexEntry *e = &texcache[i];
 		if (e->tex && e->key == key) {
 			if (e->checked == frame_no) {
+				if (e->look) look_poll(e);
 				if (e->pack1) pack_poll(e);
 				e->last_use = frame_no;
 				last_slot = i;
@@ -799,8 +883,9 @@ static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {
 		}
 		if (e->last_use < lru->last_use) lru = e;
 	}
-	uint64_t hash = hash_bytes(src, bytes);
+	uint64_t hash = TIMED(hash, hash_bytes(src, bytes));
 	if (slot && slot->hash == hash) {
+		if (slot->look) look_poll(slot);
 		if (slot->pack1) pack_poll(slot);
 		slot->checked = slot->last_use = frame_no;
 		last_slot = (int)(slot - texcache);
@@ -815,6 +900,8 @@ static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {
 	slot->pack1 = 0;
 	free(slot->ui_orig);
 	slot->ui_orig = NULL;
+	free(slot->look);
+	slot->look = NULL;
 	last_slot = (int)(slot - texcache);
 	batch_flush();  // queued draws may use the GL texture about to be (re)filled
 
@@ -843,6 +930,7 @@ static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {
 	// Linear copy (unswizzled if needed: blocks of 16 bytes x 8 rows), padded so reads past the
 	// last row's pitch stay in bounds.
 	size_t pad = (size_t)w * 4 + 16;
+	uint64_t t_dec = rt_now_us();
 	uint8_t *unswz = calloc(1, row_bytes * h + pad);
 	const uint8_t *lin = unswz;
 	if (fmt < 8) {
@@ -933,6 +1021,7 @@ static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {
 		}
 	}
 	free(unswz);
+	prof.dec += rt_now_us() - t_dec;
 
 	// A replacement from the texture pack (the HD textures) takes the place of everything below.
 	static int pack_log = -1;
@@ -941,18 +1030,32 @@ static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {
 		rt_log("texpack: upload %016llx %dx%d fmt %d at %08x", (unsigned long long)texpack_key(out, w, w, h), w, h, fmt, addr);
 	// A UI atlas with words that text.h draws again: with the pack's picture too, the picture with
 	// those words over it (uitext_over), else the redrawn atlas below.
-	bool claimed = rs > 1 && fmt >= 4 && fmt <= 7 && slot->changes < 4 && uitext_claims(out, w, h);
-	int pk = slot->changes < 4 ? texpack_find(out, w, h) : -1;
+	// What the pack has for these contents: known (the memo), or looked up later (look_poll).
+	uint64_t mkey = hash ^ clut_hash * 0x9E3779B97F4A7C15ull ^ ((uint64_t)fmt << 56) ^ ((uint64_t)w << 44) ^ ((uint64_t)h << 32) ^
+	                ((uint64_t)stride << 16) ^ ((uint64_t)rs << 8) ^ (swz ? 1 : 0);
+	bool claimed = false, look = false;
+	int pk = -1;
+	if (slot->changes < 4) {
+		bool mcl;
+		if (memo_get(mkey, &pk, &mcl)) claimed = mcl;
+		else {
+			claimed = rs > 1 && fmt >= 4 && fmt <= 7 && TIMED(find, uitext_claims(out, w, h));
+			if (texpack_active()) look = true;
+			else memo_put(mkey, -1, claimed);
+		}
+	}
 	if (pk >= 0 && claimed) {
 		int pw, ph, iw, ih;
 		bool failed;
-		uint32_t *px = texpack_load(pk, &pw, &ph, &iw, &ih, &failed);
-		const uint32_t *over = px ? uitext_over(out, w, h, rs, px, pw, ph, iw, ih) : NULL;
+		uint32_t *px = TIMED(read, texpack_load(pk, &pw, &ph, &iw, &ih, &failed));
+		if (px && !slot->tex) glGenTextures(1, &slot->tex);
+		bool gl = px && TIMED(over, uitext_over_gl(out, w, h, rs, px, pw, ph, iw, ih, slot->tex));
+		const uint32_t *over = px && !gl ? TIMED(over, uitext_over(out, w, h, rs, px, pw, ph, iw, ih)) : NULL;
 		free(px);
-		if (over) {
-			if (!slot->tex) glGenTextures(1, &slot->tex);
+		if (gl || over) {
 			glBindTexture(GL_TEXTURE_2D, slot->tex);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w * rs, h * rs, 0, GL_RGBA, GL_UNSIGNED_BYTE, over);
+			if (over) TIMED_DO(gpu, glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w * rs, h * rs, 0, GL_RGBA, GL_UNSIGNED_BYTE, over));
+			prof.n_pack++;
 			gl_invalidate();
 			free(out);
 			slot->key = key, slot->hash = hash, slot->w = w, slot->h = h;
@@ -972,7 +1075,7 @@ static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {
 	if (pk >= 0) {
 		int pw, ph, iw, ih;
 		bool failed;
-		uint32_t *px = texpack_load(pk, &pw, &ph, &iw, &ih, &failed);
+		uint32_t *px = TIMED(read, texpack_load(pk, &pw, &ph, &iw, &ih, &failed));
 		slot->w = w, slot->h = h;
 		bool shown = px && pack_upload(slot, px, pw, ph, iw, ih, w, h);
 		free(px);
@@ -1026,13 +1129,15 @@ static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {
 	// A UI atlas with text baked in: drawn again at the render scale (text.h), if it is.
 	// (atlases are paletted; the GPU draws it, or else the CPU)
 	if (!slot->tex) glGenTextures(1, &slot->tex);
-	bool ui_gl = rs > 1 && fmt >= 4 && fmt <= 7 && uitext_hires_gl(out, w, h, rs, slot->tex);
-	const uint32_t *ui = !ui_gl && rs > 1 && fmt >= 4 && fmt <= 7 ? uitext_hires(out, w, h, rs) : NULL;
+	bool ui_gl = rs > 1 && fmt >= 4 && fmt <= 7 && TIMED(vec, uitext_hires_gl(out, w, h, rs, slot->tex));
+	const uint32_t *ui = !ui_gl && rs > 1 && fmt >= 4 && fmt <= 7 ? TIMED(vec, uitext_hires(out, w, h, rs)) : NULL;
+	prof.n_new++;
 	glBindTexture(GL_TEXTURE_2D, slot->tex);
 	if (ui) glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w * rs, h * rs, 0, GL_RGBA, GL_UNSIGNED_BYTE, ui);
 	else if (!ui_gl) glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, out);
 	gl_invalidate();
-	free(out);
+	if (look) slot->look = out, slot->look_key = mkey, slot->look_claimed = claimed;  // look_poll's
+	else free(out);
 	slot->key = key;
 	slot->hash = hash;
 	slot->checked = frame_no;
@@ -1932,7 +2037,10 @@ void ge_forget_textures(void) {
 		texcache[i].hash = 0, texcache[i].checked = 0, texcache[i].pack1 = 0;
 		free(texcache[i].ui_orig);
 		texcache[i].ui_orig = NULL;
+		free(texcache[i].look);
+		texcache[i].look = NULL;
 	}
+	memset(memo, 0, sizeof memo);  // the pack or the switches changed
 }
 
 // Returns the texture to show for the displayed framebuffer address (an FBO if the GE rendered

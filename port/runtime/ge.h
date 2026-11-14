@@ -10,6 +10,7 @@ void ge_command(uint32_t cmd, uint32_t data, uint32_t addr);
 GLuint ge_display_texture(uint32_t fb_addr, int stride, int fmt, int *src_w, int *src_h);
 void ge_unbind_target(void);
 void ge_draw_stats(uint64_t *draws, uint64_t *batches);
+void ge_hitch(uint64_t frame_us);  // PANGYA_HITCH=ms: where a slow frame's time went
 int ge_render_scale(void);
 void ge_set_render_scale(int n);  // 1..6, takes effect immediately
 void ge_set_tex_filter(int mode);

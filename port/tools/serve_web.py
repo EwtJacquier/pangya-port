@@ -18,6 +18,10 @@ server offers.
 Ad hoc play: GET /livekit-token?room=R&identity=I returns {url, token} for the LiveKit room
 "pangya-R", from LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET in port/.env (see web/net.js).
 
+A password for the whole page (for a server others reach, e.g. through a tunnel):
+python3 tools/serve_web.py --set-password NAME asks for it and keeps it in port/.htpasswd (one
+"name:pbkdf2_sha256$rounds$salt$hash" line per name; --auth FILE for another file). While that
+file exists every request needs one of its names and passwords (HTTP Basic: the browser asks).
 """
 import argparse
 import base64
@@ -72,6 +76,38 @@ PBKDF2_ROUNDS = 200_000
 
 def hash_password(password, salt):
     return hashlib.pbkdf2_hmac("sha256", password.encode(), salt, PBKDF2_ROUNDS).hex()
+
+
+def read_htpasswd(path):
+    """name -> (salt, hash) from an --auth file; empty without one."""
+    users = {}
+    try:
+        for line in Path(path).read_text().splitlines():
+            name, sep, rec = line.strip().partition(":")
+            parts = rec.split("$")
+            if sep and len(parts) == 4 and parts[0] == "pbkdf2_sha256" and int(parts[1]) == PBKDF2_ROUNDS:
+                users[name] = (bytes.fromhex(parts[2]), parts[3])
+    except (OSError, ValueError):
+        pass
+    return users
+
+
+def set_password(path, name):
+    if not name or ":" in name:
+        raise SystemExit("a name without ':' please")
+    pw = getpass.getpass(f"Password for {name}: ")
+    if len(pw) < 4 or pw != getpass.getpass("Again: "):
+        raise SystemExit("the two passwords differ, or it is shorter than 4 characters: nothing changed")
+    salt = secrets.token_bytes(16)
+    keep = [line for line in (Path(path).read_text().splitlines() if Path(path).is_file() else [])
+            if line.strip() and line.partition(":")[0] != name]
+    keep.append(f"{name}:pbkdf2_sha256${PBKDF2_ROUNDS}${salt.hex()}${hash_password(pw, salt)}")
+    old = os.umask(0o077)
+    try:
+        Path(path).write_text("\n".join(keep) + "\n")
+    finally:
+        os.umask(old)
+    print(f"{path}: the page now asks for {name}'s password (restart the server)")
 
 
 
@@ -156,7 +192,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8642)
     ap.add_argument("--iso", default=str(Path(__file__).resolve().parents[2] / "Pangya - Fantasy Golf (USA).iso"))
+    ap.add_argument("--auth", default=str(Path(__file__).resolve().parents[1] / ".htpasswd"),
+                    help="the page's password file (only used when it exists)")
+    ap.add_argument("--set-password", metavar="NAME", help="ask for NAME's password, keep it in --auth and quit")
     args = ap.parse_args()
+    if args.set_password:
+        return set_password(args.auth, args.set_password)
+    users = read_htpasswd(args.auth)  # the page's password (HTTP Basic)
+    locked = bool(users)  # behind a password: answers never go to a shared cache (a CDN's)
+    good_auth = set()  # Authorization headers already checked (PBKDF2 takes a while; the page asks a lot)
     web = Path(__file__).resolve().parents[1] / "build" / "web"
     dump = Path(__file__).resolve().parents[1] / "build" / "webdump"
     ms0 = Path(__file__).resolve().parents[1] / "build" / "ms0"
@@ -227,11 +271,35 @@ def main():
 
         def authorized(self):
             """Whether to answer the request (else it was answered already)."""
-            return True
+            # With a password file, the request's Basic credentials (else a 401 asking for them). The
+            # tab's icons go without: the browser fetches them on its own, without the password just
+            # typed, and their 401 made it ask for the password a second time.
+            if not users or self.path.split("?")[0] in ("/favicon.ico", "/favicon-32.png", "/apple-touch-icon.png"):
+                return True
+            h = self.headers.get("Authorization", "")
+            if h in good_auth:
+                return True
+            if h.startswith("Basic "):
+                try:
+                    name, _, pw = base64.b64decode(h[6:], validate=True).decode().partition(":")
+                except (ValueError, UnicodeDecodeError):
+                    name, pw = "", ""
+                rec = users.get(name)
+                if rec and hmac.compare_digest(rec[1], hash_password(pw, rec[0])):
+                    good_auth.add(h)
+                    return True
+                time.sleep(1)  # a wrong password: slowly
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Basic realm="Pangya", charset="UTF-8"')
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return False
 
 
         def end_headers(self):
             cache = self.__dict__.pop("cache", None) or ("max-age=31536000, immutable" if self.__dict__.pop("immutable", False) else "no-store")
+            if locked and cache != "no-store":
+                cache = "private, " + cache  # behind a password: never in a shared cache (a CDN's)
             self.send_header("Cache-Control", cache)
             self.send_header("Accept-Ranges", "bytes")
             super().end_headers()
@@ -428,8 +496,8 @@ def main():
             pass
 
     os.chdir(web)
-    note = ""
-    print(f"serving {web} on http://127.0.0.1:{args.port}/  (ISO at /game.iso){note}", flush=True)
+    print(f"serving {web} on http://127.0.0.1:{args.port}/  (ISO at /game.iso)"
+          + (", behind the page's password" if locked else ""), flush=True)
     ThreadingHTTPServer(("127.0.0.1", args.port), Handler).serve_forever()
 
 

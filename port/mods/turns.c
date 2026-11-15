@@ -1,4 +1,4 @@
-// Mod 3: network rounds of two or three players in turns, everyone watching the player whose turn it is.
+// Mod 3: network rounds of two to four players in turns, everyone watching the player whose turn it is.
 //
 // The golf singleton keeps the game type at +0x13d0 (FUN_0889f798): 1 match against the computer,
 // 2-4 the single-player modes, 5 network "single" (everyone plays at once, each with their own
@@ -44,7 +44,7 @@ static bool turns(void) {
 // scores by hole (FUN_0889a294: 2 of 100, reset by FUN_0889a408) and the characters' models (the
 // menu avatar's array, FUN_089bce98: 2 of 0x410, the first the menu's own). They are made for
 // TABLE_PLAYERS here (below, "room for more players").
-#define TURN_PLAYERS 3
+#define TURN_PLAYERS 4  // a room holds 4 at most
 #define TABLE_PLAYERS 8
 
 static int setup_type;  // the real type while FUN_088a04c0 runs as type 5
@@ -252,19 +252,64 @@ static void words_of(uint32_t m, uint32_t *w, int *n, int cap) {
 		if (is_ptr(M32(a))) w[(*n)++] = M32(a);
 }
 
+static uint32_t left[512];  // what unshare left to the other models
+static int n_left;
+static void leave(uint32_t a) {
+	uint32_t v = M32(a);
+	M32(a) = 0;
+	for (int i = 0; i < n_left; i++)
+		if (left[i] == v) return;
+	if (n_left < 512) left[n_left++] = v;
+}
 static int unshare(uint32_t m, const uint32_t *w, int n) {
 	int k = 0;
 	for (int i = 0; i < n; i++) {
-		if (M32(m + 4) == w[i]) M32(m + 4) = 0, k++;
-		if (M32(m + 0x10) == w[i]) M32(m + 0x10) = 0, k++;
+		if (M32(m + 4) == w[i]) leave(m + 4), k++;
+		if (M32(m + 0x10) == w[i]) leave(m + 0x10), k++;
 		uint32_t b = M32(m + 0x14), e = M32(m + 0x18);
 		if (b && e > b && e - b < 0x400)
 			for (uint32_t a = b; a < e; a += 4)
-				if (M32(a) == w[i]) M32(a) = 0, k++;
+				if (M32(a) == w[i]) leave(a), k++;
 		for (uint32_t a = m + 0x30; a < m + 0x330; a += 4)
-			if (M32(a) == w[i]) M32(a) = 0, k++;
+			if (M32(a) == w[i]) leave(a), k++;
 	}
 	return k;
+}
+
+// The resource manager (WResourceManager) keeps an entry per model that took a resource (FUN_08ac75cc):
+// two models of a character share some pets, each with its entry. Releasing one (FUN_08ac5758) drops
+// an entry and destroys the pet unless it is the cache's own (its record's first word). A model that
+// leaves a shared pet to another also drops its entry, the pet kept: else the entry stayed, its pet
+// destroyed with the other model, and the menus' ReleaseAllPets (FUN_08ac5ed4) read it (a crash).
+#define RES_MANAGER 0x08b637a4u
+static uint32_t res_entry(uint32_t mgr, uint32_t pet, int *count) {  // the first entry of pet, and how many
+	uint32_t head = M32(mgr + 0x88), p = head, first = 0;
+	*count = 0;
+	for (int k = 0; is_ptr(p) && k < 16384; k++) {
+		uint32_t ent = M32(p);
+		if (is_ptr(ent) && M32(ent + 4) == pet && !(*count)++) first = ent;
+		uint32_t nx = M32(p + 16);
+		if (nx == head) break;
+		p = nx;
+	}
+	return first;
+}
+static uint32_t call2(CPU *c, uint32_t func, uint32_t a0, uint32_t a1, uint32_t a2);
+static void drop_left_entries(CPU *c) {
+	uint32_t mgr = M32(RES_MANAGER);
+	int dropped = 0;
+	for (int i = 0; is_ptr(mgr) && i < n_left; i++) {
+		int count;
+		uint32_t ent = res_entry(mgr, left[i], &count), rec = ent ? M32(ent) : 0;
+		if (count < 2 || !is_ptr(rec)) continue;
+		uint32_t kept = M32(rec);
+		M32(rec) = left[i];  // as the cache's own: the entry goes, the pet stays
+		call2(c, 0x08ac5758u, mgr, left[i], 0);
+		M32(rec) = kept;
+		dropped++;
+	}
+	if (dropped) rt_log("turns: %d shared resource entr%s dropped (the pets kept)", dropped, dropped == 1 ? "y" : "ies");
+	n_left = 0;
 }
 
 // FUN_089cac24(model, flags) releases parts of a model; loading a character into one
@@ -279,7 +324,6 @@ static int unshare(uint32_t m, const uint32_t *w, int n) {
 // kept: they outlived the actor and released, at the menu, pictures player 0's had freed (a crash).
 // They go with player 1's, sharing what player 0's keeps.
 static bool releasing_others;
-static uint32_t call2(CPU *c, uint32_t func, uint32_t a0, uint32_t a1, uint32_t a2);
 static void release_others(CPU *c, uint32_t arr) {
 	uint32_t g = golf(), doc = g ? M32(g + 0x143c) : 0, n = doc ? M8(doc + 0xc1) : 0;
 	for (uint32_t p = 2; p < n && p < TABLE_PLAYERS; p++) {
@@ -309,6 +353,17 @@ void f_089cac24(CPU *c) {
 			k += unshare(m, w, nw);
 		}
 		if (k) rt_log("turns: player %u's model is character %x as another's: %d shared resource(s) left to it", (m - arr) / 0x410, M32(m), k);
+		drop_left_entries(c);
+	}
+	if (getenv("PANGYA_DBG_RELEASE") && ended) {
+		uint32_t gd2 = M32(GAMEDATA), av2 = gd2 ? M32(gd2 + 0x24) : 0, arr2 = av2 ? M32(av2 + 0x90) : 0;
+		char buf[1200]; int o = 0;
+		for (uint32_t k = 0; arr2 && k < 4; k++) {
+			uint32_t mm = arr2 + k * 0x410, b = M32(mm + 0x14), e = M32(mm + 0x18);
+			o += snprintf(buf + o, sizeof buf - o, " | m%u c%x +4 %08x list", k, M32(mm), M32(mm + 4));
+			for (uint32_t x = b; b && e > x && x < b + 0x40 && o < 1100; x += 4) o += snprintf(buf + o, sizeof buf - o, " %08x", M32(x));
+		}
+		rt_log("DBG release m=%d flags %x ra %08x%s", arr2 && m >= arr2 ? (int)((m - arr2) / 0x410) : -1, A1, ra, buf);
 	}
 	f_089cac24_orig(c);
 	if (ra == RELEASED_BY_END_SCENE && arr && m == arr + 0x410) release_others(c, arr);
@@ -332,11 +387,52 @@ void f_089c994c(CPU *c) {
 	f_089c994c_orig(c);
 }
 
+// Tests (PANGYA_DBG_RELEASE=1): a resource released twice (FUN_08ac5758(cache, it, 1)) is logged
+// with both callers.
+void f_08ac5758(CPU *c) {
+	static int on = -1;
+	if (on < 0) on = getenv("PANGYA_DBG_RELEASE") != NULL;
+	if (on && A1 && ended) {  // from the round's end to the menus
+		static uint32_t seen[4096], from[4096];
+		static int n;
+		uint32_t r = A1;
+		for (int i = 0; i < n; i++)
+			if (seen[i] == r) {
+				rt_log("DBG released twice: %08x from %08x (before from %08x)", r, c->r[31], from[i]);
+				break;
+			}
+		if (n < 4096) seen[n] = r, from[n] = c->r[31], n++;
+		rt_log("DBG release %08x from %08x \"%.24s\"", r, c->r[31], is_ptr(r) ? rt_str(r + 200) : "?");
+	}
+	f_08ac5758_orig(c);
+}
+
+// Tests (PANGYA_DBG_RELEASE=1): the resource manager's list checked before ReleaseAllPets
+// (FUN_08ac5ed4) walks it: a link, entry or pet that is no longer one is logged.
+void f_08ac5ed4(CPU *c) {
+	if (getenv("PANGYA_DBG_RELEASE")) {
+		uint32_t mgr = A0, head = is_ptr(mgr) ? M32(mgr + 0x88) : 0, p = head;
+		int k = 0, bad = 0;
+		while (p && k < 16384) {
+			uint32_t ent = is_ptr(p) ? M32(p) : 0, pet = is_ptr(ent) ? M32(ent + 4) : 0;
+			bool ok = is_ptr(p) && is_ptr(ent) && (!pet || is_ptr(pet));
+			const char *nm = ok && pet ? rt_str(pet + 200) : "";
+			if (ok && pet && (nm[0] < 0x20 || nm[0] > 0x7e)) ok = false;
+			if (!ok && bad++ < 10) rt_log("DBG pets: link %d at %08x entry %08x pet %08x name %02x", k, p, ent, pet, (uint8_t)nm[0]);
+			uint32_t nx = is_ptr(p) ? M32(p + 16) : 0;
+			p = nx != head ? nx : 0;
+			k++;
+		}
+		rt_log("DBG pets: %d links, %d bad (manager %08x)", k, bad, mgr);
+	}
+	f_08ac5ed4_orig(c);
+}
+
 // The end scene (set up by FUN_088f10a4, a0 the Player actor) shows player 0's character: the
 // second player saw the first one's. Everything the scene keeps per player swaps with this copy's
 // player's: the look (doc+0x2a4, 0x68 each), the model (the models' array, +0x1764, 0x410 each), its
 // animation state (+0x1770, 0xb8 each), the bone handles (+0x1914, 0x18 each) and the positions
-// (+0x17e0, 0x50 each), and the lists of facial expressions (player 0's is the global one at
+// (+0x17d4, 0x50 each: four of 0x14), and the lists of facial expressions (player 0's is the global one at
 // 0x08be4e20, shared with the menu's avatar; the others' at +0x199c): an expression missing from a
 // list is made without its picture, which the scene then applied with no cache and crashed.
 static void swap_mem(uint32_t a, uint32_t b, uint32_t n) {
@@ -408,7 +504,7 @@ void f_088f10a4(CPU *c) {
 		swap_mem(M32(pa + 0x1770), M32(pa + 0x1770) + me * 0xb8, 0xb8);
 		uint32_t k = actor_slot_of(pa, me);  // where the actor keeps this player's things now
 		if (k) swap_mem(pa + 0x1914, pa + 0x1914 + k * 0x18, 0x18);
-		swap_mem(pa + 0x17e0, pa + 0x17e0 + me * 0x50, 0x50);
+		swap_mem(pa + 0x17d4, pa + 0x17d4 + me * 0x50, 0x50);  // whole blocks (from +0x17e0, player 3's reached +0x1914)
 		facials_me = me;
 		swap_facials(pa);
 		facials_actor = pa;

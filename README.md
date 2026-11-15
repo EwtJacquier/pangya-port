@@ -56,7 +56,7 @@ browser tab, and to play it together again.
   - one button on the title: it loads your save, or starts a new game if you have none;
   - all 18 characters, every shop item and the whole Pangya Collection unlocked;
   - network rounds that keep the right score on every hole;
-  - turn-based network rounds of two or three players (everyone plays the same hole in turns,
+  - turn-based network rounds of two to four players (everyone plays the same hole in turns,
     like a match), which the original only had in an unfinished form for two.
 
 ## How it works
@@ -328,6 +328,17 @@ cloudflared tunnel run pangya
 Then, in Cloudflare's dashboard, **Zero Trust → Access → Applications → Add a self-hosted
 application** for `pangya.your-domain.com`, with a policy that allows your friends' e-mail
 addresses: each one logs in with a code sent to their e-mail before the game opens.
+
+Or a simpler lock, one name and password for everyone (the browser asks for them before the page
+opens):
+
+```bash
+python3 tools/serve_web.py --set-password pangya   # asks for the password (kept hashed in port/.htpasswd)
+```
+
+and restart `serve_web.py`. `--set-password` again changes it; delete `port/.htpasswd` to open the
+page again. Some in-app browsers (chat apps') never show the browser's password prompt: open the
+link in a regular browser.
 
 **Please read this before sharing:**
 

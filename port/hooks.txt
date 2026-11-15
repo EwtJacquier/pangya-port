@@ -60,3 +60,5 @@
 088f3f58  # a player's facial expression list entry -> mods/turns.c (players past 1: a list each)
 089065e8  # the HUD's cards part made (each player's picture) -> mods/turns.c (in turns: every player's, up to four)
 089c994c  # loads a look into a character model -> mods/turns.c (this copy's character in another costume: its own look first)
+08ac5758  # releases a resource from its cache -> mods/turns.c (tests: PANGYA_DBG_RELEASE logs one released twice)
+08ac5ed4  # ReleaseAllPets -> mods/turns.c (tests: PANGYA_DBG_RELEASE checks the manager's list first)

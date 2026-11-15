@@ -1,0 +1,39 @@
+# C run right after one instruction of the game (tools/recomp.py): for game code whose own
+# arithmetic must change, where hooking the whole function (hooks.txt) is not enough.
+# "decl" lines declare what that C calls (in generated/funcs.h).
+
+# ---- mods/turns.c: the Player actor in a round in turns of 3 or more players ----------------------
+# The actor keeps some things of each player in arrays of two (a game of two players in turns):
+# 0x18 bytes each at +0x1914 (the players' things in the scene), indexed by the turn
+# (doc + 0x161). With a third player they went over the fields after them. These turns become one
+# of two slots, the player's things moved into it (turns_actor_slot).
+decl uint32_t turns_actor_slot(uint32_t turn);
+decl uint32_t turns_other_slot(uint32_t turn);
+088e5da8  c->r[4] = turns_actor_slot(c->r[4]);
+088e5de4  c->r[4] = turns_actor_slot(c->r[4]);
+088ec360  c->r[4] = turns_actor_slot(c->r[4]);
+088ec39c  c->r[4] = turns_actor_slot(c->r[4]);
+088eca3c  c->r[4] = turns_actor_slot(c->r[4]);
+088eca6c  c->r[4] = turns_actor_slot(c->r[4]);
+088ed4c4  c->r[4] = turns_actor_slot(c->r[4]);
+088ed500  c->r[4] = turns_actor_slot(c->r[4]);
+088ed5fc  c->r[4] = turns_actor_slot(c->r[4]);
+088ed638  c->r[4] = turns_actor_slot(c->r[4]);
+088eeb54  c->r[4] = turns_actor_slot(c->r[4]);
+088eeba8  c->r[4] = turns_actor_slot(c->r[4]);
+088eedc4  c->r[4] = turns_actor_slot(c->r[4]);
+088efc88  c->r[4] = turns_actor_slot(c->r[4]);
+088efcdc  c->r[4] = turns_actor_slot(c->r[4]);
+088f56d0  c->r[4] = turns_actor_slot(c->r[4]);
+088f57c4  c->r[4] = turns_actor_slot(c->r[4]);
+088f613c  c->r[4] = turns_actor_slot(c->r[4]);
+088f6184  c->r[4] = turns_actor_slot(c->r[4]);
+088f61c0  c->r[4] = turns_actor_slot(c->r[4]);
+088f6274  c->r[4] = turns_actor_slot(c->r[4]);
+088f637c  c->r[4] = turns_actor_slot(c->r[4]);
+# "The other player" is 1 - turn: the actor frees the other's breath (+0x1768, two slots) every
+# frame (FUN_088eb648), and message 0x108 hides the other (FUN_088ed920). With a turn past 1 that
+# went below the arrays (the first freed the actor's models). The rest of the others: mods/turns.c.
+088ec124  c->r[16] = turns_other_slot(c->r[16]);
+088f07d8  c->r[4] = turns_other_slot(c->r[4]);
+088f080c  c->r[5] = turns_other_slot(c->r[5]);

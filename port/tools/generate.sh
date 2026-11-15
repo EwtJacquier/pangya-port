@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # From your decrypted EBOOT to C (generated/): loads the program the way the PSP does, then
 # translates every function with the analysis in ../re/export (program.json: where the functions
-# and jump tables are; no game code). Run it again after changing hooks.txt.
+# and jump tables are; no game code). Run it again after changing hooks.txt or patches.txt.
 #
 #   tools/generate.sh [path/to/EBOOT_decrypted.elf]      (default: ../EBOOT_decrypted.elf)
 set -euo pipefail

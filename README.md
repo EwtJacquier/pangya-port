@@ -56,8 +56,8 @@ browser tab, and to play it together again.
   - one button on the title: it loads your save, or starts a new game if you have none;
   - all 18 characters, every shop item and the whole Pangya Collection unlocked;
   - network rounds that keep the right score on every hole;
-  - turn-based network rounds (everyone plays the same hole in turns, like a match), which the
-    original only had in an unfinished form.
+  - turn-based network rounds of two or three players (everyone plays the same hole in turns,
+    like a match), which the original only had in an unfinished form for two.
 
 ## How it works
 
@@ -87,7 +87,7 @@ your UMD ─▶ ISO ─▶ EBOOT.BIN (encrypted) ─▶ EBOOT_decrypted.elf
   comes from an emulator): graphics go to OpenGL ES 3 / WebGL 2, sound to SDL or WebAudio, the
   game's files are read straight from your ISO.
 - Mods replace game functions by address (`port/hooks.txt`) with hand-written C that can still
-  call the original.
+  call the original; a few change single instructions (`port/patches.txt`).
 
 `port/README.md` has the technical details.
 
@@ -329,16 +329,6 @@ Then, in Cloudflare's dashboard, **Zero Trust → Access → Applications → Ad
 application** for `pangya.your-domain.com`, with a policy that allows your friends' e-mail
 addresses: each one logs in with a code sent to their e-mail before the game opens.
 
-Or a simpler lock, one name and password for everyone (the browser asks for them before the page
-opens):
-
-```bash
-python3 tools/serve_web.py --set-password pangya   # asks for the password (kept hashed in port/.htpasswd)
-```
-
-and restart `serve_web.py`. `--set-password` again changes it; delete `port/.htpasswd` to open the
-page again.
-
 **Please read this before sharing:**
 
 - Whoever opens the address downloads the game's data from **your** ISO and the translated game
@@ -395,7 +385,7 @@ There is no database server: everything is plain files in your `port/build/` fol
 port/
   runtime/        the PSP's system, rewritten (CPU helpers, threads, files, graphics, sound,
                   video, saves, network, texture packs)
-  mods/           the mods (C), hooked by address in hooks.txt
+  mods/           the mods (C), hooked by address in hooks.txt (and patches.txt)
   web/            the browser page (shell.html), audio and LiveKit glue
   tools/          generate.sh, recomp.py, prx_load.py, serve_web.py, textures.py, build scripts;
                   uitext/: the vector text's generator and the transcribed interface words

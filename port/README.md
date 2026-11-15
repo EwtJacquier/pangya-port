@@ -23,7 +23,7 @@ python3 tools/recomp.py . ../re/export/program.json
 Analysis fixes Ghidra doesn't find by itself (methods only called through vtables, unresolved
 `switch` tables) live in `re/export/fixups.json` and are applied by
 `re/ghidra_scripts/FixupCode.java`. `tools/rebuild.sh` runs the whole chain
-(`SKIP_GHIDRA=1` for recompile + build only; needed after changing `hooks.txt`).
+(`SKIP_GHIDRA=1` for recompile + build only; needed after changing `hooks.txt` or `patches.txt`).
 
 ## Generated code model
 
@@ -36,6 +36,8 @@ Analysis fixes Ghidra doesn't find by itself (methods only called through vtable
 - PSP imports → `hle_<name>(c)`; the default (weak) implementation only logs "not implemented".
 - Mods replace game functions: `hooks.txt` lists the addresses; the hand-written `f_XXXXXXXX` in
   `mods/*.c` takes the place of the generated one, which stays callable as `f_XXXXXXXX_orig`.
+- Where a mod must change the game's own arithmetic inside a function, `patches.txt` adds C right
+  after one instruction (by address); its `decl` lines declare what that C calls.
 
 ## Running
 

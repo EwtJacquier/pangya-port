@@ -1,4 +1,4 @@
-// Mod 3: network rounds of two players in turns, everyone watching the player whose turn it is.
+// Mod 3: network rounds of two or three players in turns, everyone watching the player whose turn it is.
 //
 // The golf singleton keeps the game type at +0x13d0 (FUN_0889f798): 1 match against the computer,
 // 2-4 the single-player modes, 5 network "single" (everyone plays at once, each with their own
@@ -38,11 +38,14 @@ static bool turns(void) {
 #define ROOM 0x600u          // the network room (FUN_0889d500): +0xc this player's index, +0x10 players
 #define LOADED 0x5ccu        // gamedata: characters on the course (FUN_08883940 / FUN_08883980)
 #define MAX_PLAYERS 4        // players the messages' tables keep (a room has up to 4)
-// Players a round in turns has room for: the round's player list (FUN_0889a154: 2 entries of 0x120
-// whatever the count it is given) and the characters' models (the menu avatar's array, FUN_089bce98:
-// 2 of 0x410, the first the menu's own) are made for two. A third player wrote past both (tried:
-// the game crashed on the first turn). Rooms of 3 or 4 play at once, as a "single" round does.
-#define TURN_PLAYERS 2
+// Rooms of 2 to TURN_PLAYERS players play in turns; bigger ones at once, as a "single" round does.
+// The game made three tables for two players whatever the count (a third wrote past them: it
+// crashed on the first turn): the round's player list (FUN_0889a154: 2 of 0x120), the players'
+// scores by hole (FUN_0889a294: 2 of 100, reset by FUN_0889a408) and the characters' models (the
+// menu avatar's array, FUN_089bce98: 2 of 0x410, the first the menu's own). They are made for
+// TABLE_PLAYERS here (below, "room for more players").
+#define TURN_PLAYERS 3
+#define TABLE_PLAYERS 8
 
 static int setup_type;  // the real type while FUN_088a04c0 runs as type 5
 static bool ended;      // a round in turns ended (its game over runs as type 5)
@@ -52,6 +55,45 @@ static uint32_t player_actor;  // the Player actor (FUN_088ed920's a0), in a rou
 static uint32_t golf(void) { return M32(GOLF); }
 static uint32_t my_index(void) { return M32(M32(GAMEDATA) + ROOM + 0xc); }
 static uint32_t doc_player(uint32_t doc, uint32_t i) { return M32(doc + 0xa8) + i * 0x120; }
+
+// ---- room for more players ------------------------------------------------------------------
+// The three tables (see TURN_PLAYERS) get TABLE_PLAYERS places: the array allocation they call
+// (FUN_08b24f08(count, size, constructor, ...), "new[]": the count is kept in the block, and the
+// release reads it from there) is given that count at those three calls (told apart by the return
+// address), and the places past the second are cleared and reset as the game does the first two.
+#define CALLED_BY_PLAYERS 0x0889a1f0u  // FUN_0889a154: the round's players, 0x120 each (doc+0xa8)
+#define CALLED_BY_SCORES 0x0889a330u   // FUN_0889a294: the scores by hole, 100 each (doc+0xac)
+#define CALLED_BY_MODELS 0x089bcf74u   // FUN_089bce98: the characters' models, 0x410 each (avatar+0x90)
+void f_08b24f08(CPU *c) {
+	uint32_t ra = c->r[31];
+	if (A0 == 2 && (ra == CALLED_BY_PLAYERS || ra == CALLED_BY_SCORES || ra == CALLED_BY_MODELS)) A0 = TABLE_PLAYERS;
+	f_08b24f08_orig(c);
+}
+void f_0889a154(CPU *c) {  // (doc, players): the round's player list, cleared (memset) for two
+	uint32_t doc = A0;
+	f_0889a154_orig(c);
+	if (M32(doc + 0xa8)) memset(MP(M32(doc + 0xa8) + 2 * 0x120), 0, (TABLE_PLAYERS - 2) * 0x120);
+}
+void f_0889a294(CPU *c) {  // (doc): the scores by hole, cleared for two
+	uint32_t doc = A0;
+	f_0889a294_orig(c);
+	if (M32(doc + 0xac)) memset(MP(M32(doc + 0xac) + 2 * 100), 0, (TABLE_PLAYERS - 2) * 100);
+}
+void f_0889a408(CPU *c) {  // (doc): the scores by hole reset, for two: the others as the second
+	uint32_t doc = A0;
+	f_0889a408_orig(c);
+	uint32_t t = M32(doc + 0xac);
+	for (uint32_t i = 2; t && i < TABLE_PLAYERS; i++) {
+		uint32_t e = t + i * 100;
+		M32(e + 0x54) = 0x60ff;
+		M32(e) = 2;
+		M32(e + 0x58) = 0;
+		M8(e + 0x3a) = 0;
+		M32(e + 0x3c) = M32(e + 0x40) = M32(e + 0x44) = 0;
+		for (uint32_t k = 0x5d; k <= 0x62; k++) M8(e + k) = 0;
+		for (uint32_t h = 0; h < 18; h++) M8(e + 4 + h) = M8(e + 0x16 + h) = M8(e + 0x28 + h) = 0;
+	}
+}
 
 // ---- the players' profiles ---------------------------------------------------------------------
 // What a copy needs to show the other player and play their shots exactly: the character, its
@@ -169,7 +211,7 @@ void f_088a04c0(CPU *c) {
 	ended = actor_swapped = false;
 	if (turns() && (type == 5 || type == 8)) {  // a "single" network room: in turns when two play
 		uint32_t n = M32(M32(GAMEDATA) + ROOM + 0x10);
-		M8(g + GOLF_TYPE) = n == TURN_PLAYERS ? 8 : 5;
+		M8(g + GOLF_TYPE) = n >= 2 && n <= TURN_PLAYERS ? 8 : 5;
 		if (M8(g + GOLF_TYPE) != type) rt_log("turns: %u players, %s", n, M8(g + GOLF_TYPE) == 8 ? "they play in turns" : "everyone plays at once");
 	}
 	const char *th = getenv("PANGYA_TEST_HOLES");  // tests: a shorter round (G+0x11a9 holes)
@@ -195,15 +237,19 @@ void f_088a04c0(CPU *c) {
 // model (FUN_089cac24: the other players' at the end, FUN_088f10a4) destroyed what another still used:
 // the game crashed back in the menus. A model whose character another one also has leaves the
 // shared resources to it.
+// Only the words that are addresses in the game's memory count as resources: the model also keeps
+// numbers there (scales, matrices: 1.0f and the like), and a third player's model, new, has the
+// same ones as the others; clearing those broke it (a null pointer when drawn on the first turn).
+static bool is_ptr(uint32_t v) { return v >= 0x08800000u && v < 0x0a000000u && !(v & 3); }
 static void words_of(uint32_t m, uint32_t *w, int *n, int cap) {
-	if (M32(m + 4) && *n < cap) w[(*n)++] = M32(m + 4);
-	if (M32(m + 0x10) && *n < cap) w[(*n)++] = M32(m + 0x10);
+	if (is_ptr(M32(m + 4)) && *n < cap) w[(*n)++] = M32(m + 4);
+	if (is_ptr(M32(m + 0x10)) && *n < cap) w[(*n)++] = M32(m + 0x10);
 	uint32_t b = M32(m + 0x14), e = M32(m + 0x18);
 	if (b && e > b && e - b < 0x400)
 		for (uint32_t a = b; a < e && *n < cap; a += 4)
-			if (M32(a)) w[(*n)++] = M32(a);
+			if (is_ptr(M32(a))) w[(*n)++] = M32(a);
 	for (uint32_t a = m + 0x30; a < m + 0x330 && *n < cap; a += 4)
-		if (M32(a)) w[(*n)++] = M32(a);
+		if (is_ptr(M32(a))) w[(*n)++] = M32(a);
 }
 
 static int unshare(uint32_t m, const uint32_t *w, int n) {
@@ -221,8 +267,35 @@ static int unshare(uint32_t m, const uint32_t *w, int n) {
 	return k;
 }
 
+// FUN_089cac24(model, flags) releases parts of a model; loading a character into one
+// (FUN_089c994c) calls it first too, and the load then keeps the parts it finds of the same
+// character: leaving them out there left a third player's model with null parts (a crash on the
+// first turn). Only the model's end (its destructor FUN_089c9880, when the menu's avatar goes) and
+// the end scene's release of the others' (FUN_088f10a4) leave the shared parts.
+#define RELEASED_BY_DESTRUCTOR 0x089c98f8u
+#define RELEASED_BY_END_SCENE 0x088f113cu
+// The end scene (FUN_088f10a4) releases player 1's model, the other one of two, and clears its
+// character; then part of player 0's (flags 2), to dress it for the scene. The others' models were
+// kept: they outlived the actor and released, at the menu, pictures player 0's had freed (a crash).
+// They go with player 1's, sharing what player 0's keeps.
+static bool releasing_others;
+static uint32_t call2(CPU *c, uint32_t func, uint32_t a0, uint32_t a1, uint32_t a2);
+static void release_others(CPU *c, uint32_t arr) {
+	uint32_t g = golf(), doc = g ? M32(g + 0x143c) : 0, n = doc ? M8(doc + 0xc1) : 0;
+	for (uint32_t p = 2; p < n && p < TABLE_PLAYERS; p++) {
+		if (!M32(arr + p * 0x410)) continue;
+		releasing_others = true;
+		call2(c, 0x089cac24u, arr + p * 0x410, 0xf, 0);
+		releasing_others = false;
+		M32(arr + p * 0x410) = 0;
+		rt_log("turns: the end scene released player %u's model too", p);
+	}
+}
+
 void f_089cac24(CPU *c) {
-	uint32_t m = A0, gd = M32(GAMEDATA), av = gd ? M32(gd + 0x24) : 0, arr = av ? M32(av + 0x90) : 0;
+	uint32_t ra = c->r[31];
+	bool ends = ra == RELEASED_BY_DESTRUCTOR || ra == RELEASED_BY_END_SCENE || releasing_others;
+	uint32_t m = A0, gd = ends ? M32(GAMEDATA) : 0, av = gd ? M32(gd + 0x24) : 0, arr = av ? M32(av + 0x90) : 0;
 	uint32_t n = gd ? M32(gd + LOADED) : 0;  // the models in use: one per character on the course
 	if (n > TURN_PLAYERS) n = TURN_PLAYERS;
 	if (arr && n > 1 && m >= arr && m < arr + n * 0x410 && (m - arr) % 0x410 == 0 && M32(m)) {
@@ -238,6 +311,25 @@ void f_089cac24(CPU *c) {
 		if (k) rt_log("turns: player %u's model is character %x as another's: %d shared resource(s) left to it", (m - arr) / 0x410, M32(m), k);
 	}
 	f_089cac24_orig(c);
+	if (ra == RELEASED_BY_END_SCENE && arr && m == arr + 0x410) release_others(c, arr);
+}
+
+// A character's model loads (FUN_089c994c(model, look, ...)): for another character it releases the
+// model, loads the body ("<character>.bpet"), puts the look's parts on it (FUN_089cb020,
+// CPetFrame::SetPartPets) and has the body rebuild what it draws; for the same character it only
+// changes the parts, and the body went on drawing the parts it had, freed (a crash when the
+// character was first drawn). Player 0's model is the menu's avatar's: on another copy, when player
+// 0 plays this copy's player's character in another costume, it changed that way. In a round in
+// turns such a model loads whole.
+void f_089c994c(CPU *c) {
+	uint32_t g = golf(), doc = g ? M32(g + 0x143c) : 0, model = A0, look = A1, me = my_index();
+	uint32_t own = doc && me < 4 ? doc + 0x2a4 + me * 0x68 : 0;  // this copy's player's look (FUN_0889b8fc)
+	if (g && M8(g + GOLF_TYPE) == 8 && own && model && look && look != own && M32(model) && M32(model) == M32(look) &&
+	    memcmp(MP(look), MP(own), 0x68)) {
+		rt_log("turns: a model of this copy's character in another costume: loaded whole");
+		M32(model) = 0;  // another character: FUN_089c994c releases it and loads it again
+	}
+	f_089c994c_orig(c);
 }
 
 // The end scene (set up by FUN_088f10a4, a0 the Player actor) shows player 0's character: the
@@ -255,12 +347,58 @@ static void swap_mem(uint32_t a, uint32_t b, uint32_t n) {
 }
 
 #define FACIALS0 0x08be4e20u
+#define ACTOR_FACIALS 0x199cu
 static uint32_t facials_actor;  // the Player actor whose facial lists are swapped
+static uint32_t facials_me;     // and whose (this copy's player's)
+static uint32_t facials_of_actor, facials_side[TABLE_PLAYERS];  // players past 1's own lists (below)
 static void swap_facials(uint32_t pa) {
 	uint32_t t = M32(FACIALS0);
-	M32(FACIALS0) = M32(pa + 0x199c);
-	M32(pa + 0x199c) = t;
+	if (facials_me >= 2 && facials_me < TABLE_PLAYERS && facials_of_actor == pa && facials_side[facials_me]) {
+		M32(FACIALS0) = facials_side[facials_me];
+		facials_side[facials_me] = t;
+		return;
+	}
+	M32(FACIALS0) = M32(pa + ACTOR_FACIALS);
+	M32(pa + ACTOR_FACIALS) = t;
 }
+
+// The lists of facial expressions (FUN_088f3f58(actor, player, name): entries by name, each with
+// the picture made for one player's model) are two: player 0's the global one, every other
+// player's the actor's (+0x199c, a std::list). Players 1 and 2 on the same character shared its
+// entries: releasing player 1's model freed pictures player 2's still had (a crash at the end).
+// Each player past 1 has a list of its own, in the actor's place while the game uses it.
+static uint32_t facials_list(CPU *c, uint32_t a, uint32_t p) {  // made when first needed
+	if (facials_of_actor != a) {
+		memset(facials_side, 0, sizeof facials_side);
+		facials_of_actor = a;
+	}
+	if (!facials_side[p]) {
+		uint32_t kept = M32(a + ACTOR_FACIALS);
+		CPU saved = *c;
+		c->r[29] -= 0x40;
+		c->r[4] = a + ACTOR_FACIALS, c->r[5] = c->r[29] + 0x20, c->r[31] = 0;
+		rt_call(c, 0x088f76a8u);  // the list's constructor (as the actor's makes its own)
+		*c = saved;
+		facials_side[p] = M32(a + ACTOR_FACIALS);
+		M32(a + ACTOR_FACIALS) = kept;
+	}
+	return facials_side[p];
+}
+
+void f_088f3f58(CPU *c) {
+	uint32_t a = A0, p = A1;
+	if (!a || p < 2 || p >= TABLE_PLAYERS) {
+		f_088f3f58_orig(c);
+		return;
+	}
+	uint32_t list = facials_list(c, a, p), kept = M32(a + ACTOR_FACIALS);
+	M32(a + ACTOR_FACIALS) = list;
+	f_088f3f58_orig(c);
+	facials_side[p] = M32(a + ACTOR_FACIALS);
+	M32(a + ACTOR_FACIALS) = kept;
+}
+
+static uint32_t actor_slot_of(uint32_t actor, uint32_t p);
 
 void f_088f10a4(CPU *c) {
 	uint32_t pa = A0, g = golf(), doc = g ? M32(g + 0x143c) : 0, me = my_index();
@@ -268,8 +406,10 @@ void f_088f10a4(CPU *c) {
 		swap_mem(doc + 0x2a4, doc + 0x2a4 + me * 0x68, 0x68);
 		swap_mem(M32(pa + 0x1764), M32(pa + 0x1764) + me * 0x410, 0x410);
 		swap_mem(M32(pa + 0x1770), M32(pa + 0x1770) + me * 0xb8, 0xb8);
-		swap_mem(pa + 0x1914, pa + 0x1914 + me * 0x18, 0x18);
+		uint32_t k = actor_slot_of(pa, me);  // where the actor keeps this player's things now
+		if (k) swap_mem(pa + 0x1914, pa + 0x1914 + k * 0x18, 0x18);
 		swap_mem(pa + 0x17e0, pa + 0x17e0 + me * 0x50, 0x50);
+		facials_me = me;
 		swap_facials(pa);
 		facials_actor = pa;
 		rt_log("turns: the end scene shows this copy's character (player %u's)", me);
@@ -278,13 +418,129 @@ void f_088f10a4(CPU *c) {
 	f_088f10a4_orig(c);
 }
 
+// ---- the Player actor's arrays of two ------------------------------------------------------------
+// The Player actor (one for all the players: their characters at +0x1764, 0x410 each; their
+// animations at +0x1770, 0xb8 each: both made for every player) keeps a few things in arrays of two:
+// 0x18 bytes a player at +0x1914 (things in the scene for the player in turn) and the breath effect
+// at +0x1768 (a word a player). A turn past 1 went over the fields after them (patches.txt):
+// - +0x1914: two slots, the player in turn's things moved into one (turns_actor_slot), the other
+//   players' kept here meanwhile;
+// - the breath: made for players 0 and 1 only (f_088f1318), every other one's freed each frame as
+//   the game frees "the other" one's (1 - turn: turns_other_slot, f_088eb648);
+// - message 0x108 hides "the other" player (1 - turn): every other one is hidden (f_088ed920).
+#define ACTOR_THINGS 0x1914u
+#define ACTOR_BREATH 0x1768u
+#define ACTOR_ANIMS 0x1770u
+static uint32_t slot_actor, slot_owner[2], slot_last;
+static uint8_t slot_kept[TABLE_PLAYERS][0x18];
+
+static bool many_in_turns(void) {
+	uint32_t g = golf();
+	return g && M8(g + GOLF_TYPE) == 8 && M32(g + 0x143c) && M8(M32(g + 0x143c) + 0xc1) > 2;
+}
+
+static uint32_t resident(uint32_t a, uint32_t p) {  // the slot with player p's things, moved in if needed
+	if (slot_actor != a) {  // a new actor: players 0 and 1 in their own slots
+		slot_actor = a, slot_owner[0] = 0, slot_owner[1] = 1, slot_last = 0;
+		memset(slot_kept, 0, sizeof slot_kept);
+	}
+	uint32_t k = slot_owner[0] == p ? 0 : slot_owner[1] == p ? 1 : 2;
+	if (k == 2) {  // the slot not used last takes this player's things
+		k = slot_last ^ 1;
+		memcpy(slot_kept[slot_owner[k]], MP(a + ACTOR_THINGS + k * 0x18), 0x18);
+		memcpy(MP(a + ACTOR_THINGS + k * 0x18), slot_kept[p], 0x18);
+		rt_log("turns: the Player actor's slot %u: player %u's things (player %u's kept)", k, p, slot_owner[k]);
+		slot_owner[k] = p;
+	}
+	slot_last = k;
+	return k;
+}
+
+uint32_t turns_actor_slot(uint32_t turn) {  // also after the round (type 5 again) while the actor lives
+	bool on = many_in_turns() || (ended && slot_actor && slot_actor == player_actor);
+	if (!player_actor || turn >= TABLE_PLAYERS || !on) return turn;
+	return resident(player_actor, turn);
+}
+
+// The end scene shows this copy's player as player 0 (f_088f10a4; the round already back to type
+// 5): the slot with their things trades places with slot 0 there, and so do the slots' owners here.
+static uint32_t actor_slot_of(uint32_t actor, uint32_t p) {
+	if (slot_actor != actor || p >= TABLE_PLAYERS) return p < 2 ? p : 0;  // never more than two: in place
+	uint32_t k = resident(actor, p);
+	if (k) {
+		uint32_t t = slot_owner[0];
+		slot_owner[0] = slot_owner[k], slot_owner[k] = t;
+	}
+	return k;
+}
+
+uint32_t turns_other_slot(uint32_t turn) {
+	return turn > 1 ? 0 : turn;  // 1 - 0: player 1 (the rest in f_088eb648 / f_088ed920)
+}
+
+static uint32_t call2(CPU *c, uint32_t func, uint32_t a0, uint32_t a1, uint32_t a2) {
+	CPU saved = *c;
+	c->r[4] = a0, c->r[5] = a1, c->r[6] = a2, c->r[31] = 0;
+	rt_call(c, func);
+	uint32_t r = c->r[2];
+	*c = saved;
+	return r;
+}
+
+// The breath of player p (FUN_088f1318(actor, p)): two words; players 0 and 1 only.
+void f_088f1318(CPU *c) {
+	if (A1 > 1) return;
+	f_088f1318_orig(c);
+}
+
+// The Player actor's update (FUN_088eb648(dt, actor)): every frame it frees the breath of "the
+// other" player (1 - turn); with more players, every player's but the one in turn's.
+void f_088eb648(CPU *c) {
+	uint32_t a = A0, g = golf();
+	if (a && g && M8(g + GOLF_TYPE) == 8) player_actor = a;
+	f_088eb648_orig(c);
+	if (!a || !many_in_turns()) return;
+	uint32_t turn = M8(M32(golf() + 0x143c) + 0x161);
+	for (uint32_t p = 0; p < 2; p++)
+		if (p != turn && M32(a + ACTOR_BREATH + 4 * p)) {
+			uint32_t scene = call2(c, 0x088220c4u, 0, 0, 0);
+			call2(c, 0x089c4328u, scene, M32(a + ACTOR_BREATH + 4 * p), 0);
+			M32(a + ACTOR_BREATH + 4 * p) = 0;
+		}
+}
+
+// Message 0x108 (FUN_088ed920): the player in turn shown, "the other" (1 - turn) hidden: their
+// animation's flag (+0x38) off and the scene's "PLAYER_<n>" off. Every other player, here.
+static void hide_others(CPU *c, uint32_t a) {
+	uint32_t doc = M32(golf() + 0x143c), turn = M8(doc + 0x161), n = M8(doc + 0xc1), anims = M32(a + ACTOR_ANIMS);
+	for (uint32_t p = 0; p < n && p < TABLE_PLAYERS; p++) {
+		if (p == turn) continue;
+		if (anims) M8(anims + p * 0xb8 + 0x38) = 0;
+		uint32_t name = call2(c, 0x08863fd0u, 0x08b3ba80u, p, 0);  // "PLAYER_%d"
+		uint32_t scene = call2(c, 0x0880ee08u, 0, 0, 0);
+		call2(c, 0x08868f18u, scene, name, 0);
+	}
+}
+
 // The Player actor's destructor (FUN_088ed73c) frees its own list of facial expressions: the lists
 // swapped for the end scene go back first (the global one stays the menu avatar's).
 void f_088ed73c(CPU *c) {
 	if (A0 == player_actor) player_actor = 0;
+	if (A0 == slot_actor) slot_actor = 0;
 	if (facials_actor && A0 == facials_actor) {
 		swap_facials(facials_actor);
 		facials_actor = 0;
+	}
+	if (A0 && facials_of_actor == A0) {  // players past 1's lists cleared as the actor clears its own
+		uint32_t kept = M32(A0 + ACTOR_FACIALS);
+		for (uint32_t p = 2; p < TABLE_PLAYERS; p++)
+			if (facials_side[p]) {
+				M32(A0 + ACTOR_FACIALS) = facials_side[p];
+				call2(c, 0x088c8e28u, A0 + ACTOR_FACIALS, 0, 0);
+				facials_side[p] = 0;
+			}
+		M32(A0 + ACTOR_FACIALS) = kept;
+		facials_of_actor = 0;
 	}
 	f_088ed73c_orig(c);
 }
@@ -542,69 +798,109 @@ void f_0890d788(CPU *c) {
 // and the HUD's own pictures of each player's ball and club set (+0x60 and +0x68, and the spin
 // circle's ball, +0x1c's +0x1c: one per player, made with the round from each player's things and
 // drawn by the turn: the second player's copy showed each player's ball in the other one's turn).
-static uint32_t hud_me;  // while the HUD draws in turns, on the copy of a player other than 0
+// With more than two players the HUD's per-player pictures overflowed: it keeps them in pairs (+0x60
+// and +0x64 the balls, +0x68 and +0x6c the club sets, made at the round's start for each player it
+// counts: a third player's went over the first one's club set) and its cards, as against the
+// computer, are two. So in turns the HUD sees two players: its count (FUN_088fb260) is at most 2,
+// and while it draws its player 0 is this copy's player, its player 1 the one whose turn it is (or
+// another when it is this copy's): the getter, the players' things in the round and the pictures
+// follow that view (hud_view, hud_perm: the HUD's player -> the real one), and its turn is 0 or 1.
+// A player past the second has no pictures of their own (the HUD made them for its two): the
+// slot's are shown.
+static uint32_t hud_me;  // other parts' views (the item window, the Mulligan): player 0 <-> hud_me
 static uint32_t hud_swap(uint32_t i) { return i == 0 ? hud_me : i == hud_me ? 0 : i; }
+static bool hud_view;
+static uint8_t hud_perm[TABLE_PLAYERS];
 #define PLAYER_THINGS 0x2a9u  // G + 0x270 * player: the first of a player's things in the round
-static void swap_things(uint32_t g, uint32_t me) {
-	uint8_t t[0x270];
-	memcpy(t, MP(g + PLAYER_THINGS), sizeof t);
-	memmove(MP(g + PLAYER_THINGS), MP(g + PLAYER_THINGS + me * 0x270), sizeof t);
-	memcpy(MP(g + PLAYER_THINGS + me * 0x270), t, sizeof t);
+#define HUD_PLAYERS 2
+static uint8_t things_kept[TABLE_PLAYERS][0x270];
+static void view_things(uint32_t g, uint32_t n) {  // G's player blocks in the HUD's order
+	for (uint32_t i = 0; i < n; i++) memcpy(things_kept[i], MP(g + PLAYER_THINGS + i * 0x270), 0x270);
+	for (uint32_t k = 0; k < n; k++) memcpy(MP(g + PLAYER_THINGS + k * 0x270), things_kept[hud_perm[k]], 0x270);
 }
-static void swap_words(uint32_t at, uint32_t me) {
-	uint32_t t = M32(at);
-	M32(at) = M32(at + 4 * me), M32(at + 4 * me) = t;
+static void unview_things(uint32_t g, uint32_t n) {  // back, with what the HUD wrote in them
+	for (uint32_t k = 0; k < n; k++) memcpy(things_kept[hud_perm[k]], MP(g + PLAYER_THINGS + k * 0x270), 0x270);
+	for (uint32_t i = 0; i < n; i++) memcpy(MP(g + PLAYER_THINGS + i * 0x270), things_kept[i], 0x270);
 }
-static void hud_swap_pictures(uint32_t hud, uint32_t me) {
-	swap_words(hud + 0x60, me);  // the ball and the club set by the gauge
-	swap_words(hud + 0x68, me);
-	uint32_t circle = M32(hud + 0x1c);  // the ball in the spin circle (FUN_08978e34): one picture per player at +0x1c
-	if (circle && rt_valid(circle, 0x30)) swap_words(circle + 0x1c, me);
+static void view_pair(uint32_t at, uint32_t kept[2]) {
+	kept[0] = M32(at), kept[1] = M32(at + 4);
+	for (uint32_t k = 0; k < HUD_PLAYERS; k++) M32(at + 4 * k) = kept[hud_perm[k] < HUD_PLAYERS ? hud_perm[k] : k];
 }
+static void unview_pair(uint32_t at, const uint32_t kept[2]) { M32(at) = kept[0], M32(at + 4) = kept[1]; }
 
 void f_0889a22c(CPU *c) {
-	if (hud_me) A1 = hud_swap(A1 & 0xff);
+	if (hud_view) A1 = hud_perm[(A1 & 0xff) < TABLE_PLAYERS ? (A1 & 0xff) : 0];
+	else if (hud_me) A1 = hud_swap(A1 & 0xff);
 	f_0889a22c_orig(c);
+}
+
+// The HUD's count of players.
+#define CARD_PICTURES 4  // the cards' pictures: four places (FUN_089065e8 makes them, FUN_08906afc frees them)
+static bool making_cards;
+static void at_most_two(CPU *c) {
+	uint32_t g = golf(), most = making_cards ? CARD_PICTURES : HUD_PLAYERS;
+	if (g && (M8(g + GOLF_TYPE) == 8 || setup_type == 8) && (int32_t)c->r[2] > (int32_t)most) c->r[2] = most;
+}
+
+// The cards' part of the HUD (FUN_089065e8) makes each player's picture (their character's) in its
+// four places (+0xc): for the HUD's two players only, so in turns a third player's card showed
+// another's picture. It makes them for every player (up to four); f_08906e40 shows the right ones.
+void f_089065e8(CPU *c) {
+	making_cards = true;
+	f_089065e8_orig(c);
+	making_cards = false;
+}
+void f_088fb260(CPU *c) {
+	f_088fb260_orig(c);
+	at_most_two(c);
+}
+// The spin circle's own count (FUN_0897813c): its balls' pictures are a pair at +0x1c too (a third
+// went over its gauge at +0x24, a crash at the first stance).
+void f_0897813c(CPU *c) {
+	f_0897813c_orig(c);
+	at_most_two(c);
 }
 
 void f_088fe81c(CPU *c) {
 	uint32_t g = golf(), doc = g && M8(g + GOLF_TYPE) == 8 ? M32(g + 0x143c) : 0, me = my_index();
-	if (!doc || !M32(doc + 0xa8) || me == 0 || me >= M8(doc + 0xc1) || hud_me) {
+	uint32_t n = doc ? M8(doc + 0xc1) : 0;
+	if (!doc || !M32(doc + 0xa8) || n < 2 || n > TABLE_PLAYERS || me >= n || hud_me || hud_view) {
 		f_088fe81c_orig(c);
 		return;
 	}
 	uint8_t turn = M8(doc + 0x161);
-	uint32_t hud = A0;
-	hud_me = me;
-	M8(doc + 0x161) = (uint8_t)hud_swap(turn);
-	swap_things(g, me);
-	if (hud && me < TURN_PLAYERS) hud_swap_pictures(hud, me);
+	uint32_t hud = A0, k = 0;
+	hud_perm[k++] = (uint8_t)me;
+	if (turn != me && turn < n) hud_perm[k++] = turn;
+	for (uint32_t i = 0; i < n; i++)
+		if (i != me && i != turn) hud_perm[k++] = (uint8_t)i;
+	hud_view = true;
+	M8(doc + 0x161) = turn == me ? 0 : 1;
+	view_things(g, n);
+	uint32_t balls[2], sets[2], spins[2], circle = hud ? M32(hud + 0x1c) : 0;
+	bool spin = circle && rt_valid(circle, 0x30);
+	if (hud) view_pair(hud + 0x60, balls), view_pair(hud + 0x68, sets);  // the ball and the club set by the gauge
+	if (spin) view_pair(circle + 0x1c, spins);  // the ball in the spin circle (FUN_08978e34)
 	f_088fe81c_orig(c);
-	if (hud && me < TURN_PLAYERS) hud_swap_pictures(hud, me);
-	swap_things(g, me);
+	if (spin) unview_pair(circle + 0x1c, spins);
+	if (hud) unview_pair(hud + 0x68, sets), unview_pair(hud + 0x60, balls);
+	unview_things(g, n);
 	M8(doc + 0x161) = turn;
-	hud_me = 0;
+	hud_view = false;
 }
 
 // The players' cards (FUN_08906e40, a0 its part of the HUD: each player's picture, name, strokes,
-// score and power gauge; player 0's on the left at +0x54 (a float), player 1's on the right at
-// 407 minus that) showed both, the second player's own on the right. In turns only the card of
-// the player whose turn it is shows, on the left: the others' are drawn as absent (status 3,
-// skipped) and the second player's goes where the first one's would.
+// score and power gauge; the HUD's player 0's on the left at +0x54 (a float), its player 1's on the
+// right at 407 minus that). In turns only the card of the player whose turn it is shows, on the
+// left: the other is drawn as absent (status 3, skipped), and the turn's goes where the first's would.
 void f_08906e40(CPU *c) {
 	uint32_t g = golf(), doc = g && M8(g + GOLF_TYPE) == 8 ? M32(g + 0x143c) : 0;
-	if (!doc || !M32(doc + 0xa8) || !A0) {
+	if (!doc || !M32(doc + 0xa8) || !A0 || !hud_view) {
 		f_08906e40_orig(c);
 		return;
 	}
-	uint32_t part = A0, me = hud_me, n = M8(doc + 0xc1), kept[MAX_PLAYERS];
-	uint8_t shown = M8(doc + 0x161), turn = me ? (uint8_t)hud_swap(shown) : shown;
-	hud_me = 0;
-	if (me) swap_things(golf(), me);  // the cards read the players as they are
-	M8(doc + 0x161) = turn;
-	if (n > MAX_PLAYERS) n = MAX_PLAYERS;
-	for (uint32_t i = 0; i < n; i++)
-		if (i != turn) kept[i] = M32(doc_player(doc, i)), M32(doc_player(doc, i)) = 3;
+	uint32_t part = A0, turn = M8(doc + 0x161), other = doc_player(doc, hud_perm[turn ? 0 : 1]), kept = M32(other);
+	M32(other) = 3;
 	uint32_t x = M32(part + 0x54);  // a float
 	if (turn == 1) {
 		float f;
@@ -612,13 +908,14 @@ void f_08906e40(CPU *c) {
 		f = 407.0f - f;
 		memcpy(MP(part + 0x54), &f, 4);
 	}
+	uint32_t pictures[CARD_PICTURES];  // the HUD's two players' pictures: theirs
+	for (uint32_t k = 0; k < CARD_PICTURES; k++) pictures[k] = M32(part + 0xc + 4 * k);
+	for (uint32_t k = 0; k < HUD_PLAYERS; k++)
+		if (hud_perm[k] < CARD_PICTURES && pictures[hud_perm[k]]) M32(part + 0xc + 4 * k) = pictures[hud_perm[k]];
 	f_08906e40_orig(c);
+	for (uint32_t k = 0; k < CARD_PICTURES; k++) M32(part + 0xc + 4 * k) = pictures[k];
 	M32(part + 0x54) = x;
-	for (uint32_t i = 0; i < n; i++)
-		if (i != turn) M32(doc_player(doc, i)) = kept[i];
-	M8(doc + 0x161) = shown;
-	if (me) swap_things(golf(), me);
-	hud_me = me;
+	M32(other) = kept;
 }
 
 // The name on a card (FUN_0896b39c(x, y, its text, player), floats in the FPU registers): player 0's
@@ -628,6 +925,7 @@ void f_08906e40(CPU *c) {
 #define MY_NAME 0xadbu
 void f_0896b39c(CPU *c) {
 	uint32_t g = golf(), doc = g && M8(g + GOLF_TYPE) == 8 ? M32(g + 0x143c) : 0, i = A1 & 0xff, gd = M32(GAMEDATA);
+	if (hud_view && i < TABLE_PLAYERS) i = hud_perm[i];  // the HUD's player -> the real one
 	uint32_t rb = g ? M32(g + 0xfa4) : 0, re = g ? M32(g + 0xfa8) : 0;
 	if (!doc || !gd || !rb || re <= rb || i >= (re - rb) / 0x1d0 || !M8(rb + i * 0x1d0 + 4)) {
 		f_0896b39c_orig(c);
@@ -806,7 +1104,9 @@ void f_088ed920(CPU *c) {
 			my_dir = M32(A0 + PLAYER_DIR), have_dir = true;
 		}
 	}
+	uint32_t a = A0, msg = A1 ? M32(A1 + 4) : 0;
 	f_088ed920_orig(c);
+	if (msg == 0x108 && a && many_in_turns()) hide_others(c, a);
 }
 
 // ---- items -------------------------------------------------------------------------------------
@@ -1289,6 +1589,15 @@ void f_088a2070(CPU *c) {
 	if (!doc || !M32(doc + 0xa8)) return;
 	if (rl) rule = rl;
 	uint32_t mode = M32(doc + 0x144), turn = M8(doc + 0x161), me = my_index();
+	// A hole after the first starts with a wait (mode 1, FUN_088a5568) until no other player's state
+	// (each copy sends its player's, 0x23) says 1, done with the hole before. The game sets its
+	// player 0 back to 0 there (a "single" round's own player); this copy's player kept the 1 and sent
+	// it: with two players the second went on first and so freed the first, with three the second
+	// and the third waited for each other ("connecting..." for ever). This copy's player goes to 0.
+	if (mode == 1 && me != 0 && me < M8(doc + 0xc1) && M32(doc_player(doc, me)) == 1) {
+		M32(doc_player(doc, me)) = 0;
+		rt_log("turns: this copy's player ready for hole %u", M8(doc + 0x156));
+	}
 	// The hole's end (FUN_088ab3b8, mode 0x2000): a network round stays there ten seconds at least
 	// (rule+0x2ac counts them, after a first two), then asks the board whether it is done and loads
 	// the next hole. Once the board has gone on (f_089366dc), the wait ends.
@@ -1423,4 +1732,18 @@ void f_08af9f64(CPU *c) {
 		}
 	}
 	f_08af9f64_orig(c);
+}
+
+// The scene draws each entry of its lists through FUN_0886a5b4(scene, entry's object, ...): an
+// entry without its object (a model not loaded) is not drawn, rather than read through null.
+void f_0886a5b4(CPU *c) {
+	if (!A1) {
+		static int n;
+		if (n++ < 5) {
+			uint32_t it = c->r[16], e = is_ptr(it) && is_ptr(M32(it)) ? M32(it) + 8 : 0;  // the scene's loop: s0
+			rt_log("turns: a scene entry without its object, not drawn (\"%.16s\", from %08x)", e ? rt_str(e + 0x14) : "?", c->r[31]);
+		}
+		return;
+	}
+	f_0886a5b4_orig(c);
 }

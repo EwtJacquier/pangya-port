@@ -22,6 +22,8 @@ from pathlib import Path
 
 FUNCS_PER_FILE = 250
 HOOKS = set()  # function entries replaced by hand-written code (port/hooks.txt)
+PATCHES = {}  # instruction address -> C run right after it (port/patches.txt)
+PATCH_DECLS = []  # "decl ..." lines of port/patches.txt: what that C calls, declared in funcs.h
 
 
 class Ctx:
@@ -174,6 +176,12 @@ def emit_simple(op, pc, unknown):
         return f"rt_vfpu(c, 0x{pc:08x}u, 0x{op:08x}u);"
     unknown.append(f"{pc:08x} {op:08x} unhandled instruction")
     return f"rt_break(c, 0x{pc:08x}u, 0xdead);"
+
+
+def emit_patched(op, pc, unknown):
+    """emit_simple, followed by the C that port/patches.txt adds after this instruction."""
+    s = emit_simple(op, pc, unknown)
+    return f"{s} {PATCHES[pc]}".strip() if pc in PATCHES else s
 
 
 def branch_info(op, pc):
@@ -366,7 +374,7 @@ def translate(ctx, func, funcs_by_entry, jumptables, report):
         op = ctx.word(pc)
         bi = branch_info(op, pc)
         if not bi:
-            s = emit_simple(op, pc, unknown)
+            s = emit_patched(op, pc, unknown)
             if s:
                 out.append("\t" + s)
             continue
@@ -376,7 +384,7 @@ def translate(ctx, func, funcs_by_entry, jumptables, report):
         dop = ctx.word(dpc)
         if branch_info(dop, dpc):
             report.append(f"{entry:08x}: branch in delay slot at {dpc:08x}")
-        delay = emit_simple(dop, dpc, unknown)
+        delay = emit_patched(dop, dpc, unknown)
         delay_slots.add(dpc)
 
         if kind == "b":
@@ -433,6 +441,15 @@ def main():
             line = line.split("#", 1)[0].strip()
             if line:
                 HOOKS.add(int(line, 16))
+    for patches_file in [port / "patches.txt"] + sorted(port.glob("patches.*.txt")):
+        if patches_file.exists():
+            for line in patches_file.read_text().splitlines():
+                line = line.split("#", 1)[0].strip()
+                if line.startswith("decl "):
+                    PATCH_DECLS.append(line[5:].strip())
+                elif line:
+                    addr, code = line.split(None, 1)
+                    PATCHES[int(addr, 16)] = code
 
     imports = {int(i["addr"], 16): i for i in meta["imports"]}
     funcs = []
@@ -489,6 +506,7 @@ def main():
     header += [f"void f_{f['entry']:08x}(CPU *c);" for f in funcs]
     header += [f"void f_{a:08x}(CPU *c);" for a in sorted(imports)]
     header += [f"void f_{a:08x}_orig(CPU *c);  /* original of a hooked function */" for a in sorted(HOOKS)]
+    header += PATCH_DECLS
     (gen / "funcs.h").write_text("\n".join(header) + "\n")
 
     prelude = ['#include <math.h>', '#include "funcs.h"',

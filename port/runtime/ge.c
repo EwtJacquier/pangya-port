@@ -101,6 +101,8 @@ typedef struct {
 	uint32_t *look;    // its pixels while the pack is still to be looked up for them (look_poll)
 	uint64_t look_key; // ... their content (the memo's key) and whether text.h redraws them
 	bool look_claimed;
+	uint64_t tile_key;  // PANGYA_TILES: the texture pack's key of its picture, and that picture's size
+	int tile_iw, tile_ih;
 } TexEntry;
 #define MAX_TEX 512
 static TexEntry texcache[MAX_TEX];
@@ -783,7 +785,27 @@ static void look_poll(TexEntry *e) {
 }
 
 static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy);
-static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) { return TIMED(tex, texture_get_(tw, th, uvsx, uvsy)); }
+// PANGYA_TILES=file (diagnostics, for pictures the game draws in pieces): every 2D draw
+// of a texture the texture pack knows, as "frame fb key iw ih x0 y0 x1 y1 u0 v0 u1 v1" (framebuffer
+// pixels, texels), so pieces laid side by side on the screen can be put together again.
+static FILE *tiles_f;
+static int tiles_on = -1;
+static const TexEntry *tile_cur;
+static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {
+	if (tiles_on < 0) {
+		const char *e = getenv("PANGYA_TILES");
+		tiles_f = e ? fopen(e, "w") : NULL;
+		if (tiles_f) setvbuf(tiles_f, NULL, _IOLBF, 0);
+		tiles_on = tiles_f != NULL;
+	}
+	GLuint t = TIMED(tex, texture_get_(tw, th, uvsx, uvsy));
+	if (tiles_on) {
+		tile_cur = NULL;
+		for (int i = 0; t && i < MAX_TEX; i++)
+			if (texcache[i].tex == t) tile_cur = &texcache[i];
+	}
+	return t;
+}
 static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy) {
 	uint32_t addr = ((reg[0xA8] & 0x0F0000u) << 8) | (reg[0xA0] & 0xFFFFFFu);
 	int stride = (int)(reg[0xA8] & 0x7FF);
@@ -1023,6 +1045,10 @@ static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy) {
 	free(unswz);
 	prof.dec += rt_now_us() - t_dec;
 
+	if (tiles_on) {
+		int i = texpack_find(out, w, h);
+		slot->tile_key = i >= 0 ? texpack_entry_key(i, &slot->tile_iw, &slot->tile_ih) : 0;
+	}
 	// A replacement from the texture pack (the HD textures) takes the place of everything below.
 	static int pack_log = -1;
 	if (pack_log < 0) pack_log = getenv("PANGYA_TEXPACK_LOG") != NULL;
@@ -1748,6 +1774,22 @@ static void draw_prim(uint32_t data) {
 			if (i < 6) dump_idx[i] = vi, memcpy(dump_pos[i], rv.pos, sizeof dump_pos[i]);
 		}
 		transform(&f, &rv, &tv[i], fbw, fbh, tw, th);
+	}
+	if (tiles_on && tex_on && tile_cur && tile_cur->tile_key && f.through && (type == 6 || count <= 6)) {
+		int step = type == 6 ? 2 : count;
+		for (int i = 0; i + step <= count; i += step) {
+			float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f, u0 = 1e30f, v0 = 1e30f, u1 = -1e30f, v1 = -1e30f;
+			for (int k = i; k < i + step; k++) {
+				float w = tv[k].w != 0 ? tv[k].w : 1;
+				float x = (tv[k].x / w + 1) * 0.5f * fbw, y = (1 + tv[k].y / w) * 0.5f * fbh;  // GL's y is the framebuffer's rows
+				float u = tv[k].u / uvsx * (float)tw, v = tv[k].v / uvsy * (float)th;
+				x0 = fminf(x0, x), y0 = fminf(y0, y), x1 = fmaxf(x1, x), y1 = fmaxf(y1, y);
+				u0 = fminf(u0, u), v0 = fminf(v0, v), u1 = fmaxf(u1, u), v1 = fmaxf(v1, v);
+			}
+			fprintf(tiles_f, "%llu %06x %016llx %d %d %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f\n", (unsigned long long)frame_no,
+			        cur_fbo->addr, (unsigned long long)tile_cur->tile_key, tile_cur->tile_iw, tile_cur->tile_ih, x0, y0, x1, y1,
+			        u0, v0, u1, v1);
+		}
 	}
 	if (dumping) {
 		FILE *df = ge_dump_file;

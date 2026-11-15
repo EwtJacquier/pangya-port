@@ -239,6 +239,12 @@ static int find_slow(const uint32_t *px, int w, int h) {  // a key for each poss
 // along it reaches each possible width, the row's CRC and Adler so far (crc_update and
 // adler_update go on from where they stopped) join that width's key, combined (zlib's way), and
 // at each possible height the key is looked up.
+uint64_t texpack_entry_key(int idx, int *iw, int *ih) {
+	if (idx < 0 || idx >= nents) return 0;
+	*iw = ents[idx].iw, *ih = ents[idx].ih;
+	return ents[idx].key;
+}
+
 int texpack_find(const uint32_t *px, int w, int h) {
 	if (!enabled || !nents) return -1;
 	int lw = log2i(w), lh = log2i(h);

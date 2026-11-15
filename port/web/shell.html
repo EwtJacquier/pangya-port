@@ -341,7 +341,7 @@
     <h2>Video</h2>
     <div class="row"><span>Fullscreen<br><span class="sub">Also F11 or double click</span></span><button id="fs">Enter</button></div>
     <div class="row"><span>Internal resolution<br><span class="sub">The PSP's 480x272 drawn this many times larger (lower: lighter for the computer)</span></span><div class="seg" id="scale"></div></div>
-    <div class="row"><span>Original textures<br><span class="sub">The game's own pictures: smooth as the PSP filters them, sharp (xBR) or as crisp pixels; Sharp and Pixels turn the HD textures off</span></span><div class="seg" id="texf"></div></div>
+    <div class="row"><span>Original textures<br><span class="sub">The game's own pictures: smooth as the PSP filters them, sharp (xBR) or as crisp pixels; with the HD textures on, for the ones the pack doesn't replace</span></span><div class="seg" id="texf"></div></div>
 
     <div class="row"><span>HD textures<br><span class="sub">The texture pack in build/textures; off: the game's own textures</span></span><button id="hd">On</button></div>
     <div class="row"><span>Vector text<br><span class="sub">Menus, messages and the interface's words redrawn sharp with a font (over the HD textures when they are on)</span></span><button id="vt">Off</button></div>
@@ -405,7 +405,7 @@ if (!window.pangyaMobile) {
       // the older padStick held the left one as the default, not as a choice).
       padStick: s.analogStick === 'left' ? 0 : 2,
       // By default 4x with the HD textures (the game's own ones smooth).
-      hd: s.hd !== false && !(s.texFilter > 0),  // the texture pack: on when there is one (not with sharp originals)
+      hd: s.hd !== false,  // the texture pack: on when there is one
       scale: [1, 2, 3, 4].includes(s.scale) ? s.scale : 4,  // the render scale
       texFilter: [0, 1, 2].includes(s.texFilter) ? s.texFilter : 0,  // the game's own textures: 0 smooth, 1 xBR, 2 pixels
       vt: s.vt !== false,  // vector text (a build with runtime/text.c): on unless the player turns it off
@@ -511,7 +511,6 @@ if (!window.pangyaMobile) {
     });
     segButtons(document.getElementById('texf'), TEX_FILTERS, settings.texFilter, (n) => {
       settings.texFilter = n;
-      if (n > 0 && settings.hd) { settings.hd = false; applyHd(); }  // crisp originals: the HD textures off
       saveSettings(); applyVideo(); render();
     });
     segButtons(document.getElementById('stick'), STICKS, settings.padStick, (n) => {
@@ -576,7 +575,6 @@ if (!window.pangyaMobile) {
   document.getElementById('full').addEventListener('click', toggleFullscreen);
   document.getElementById('hd').addEventListener('click', () => {
     settings.hd = !settings.hd;
-    if (settings.hd && settings.texFilter) { settings.texFilter = 0; applyVideo(); }  // the HD textures: smooth originals
     saveSettings(); applyHd(); render();
   });
   document.getElementById('vt').addEventListener('click', () => {

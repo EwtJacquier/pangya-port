@@ -498,12 +498,16 @@ static uint32_t actor_slot_of(uint32_t actor, uint32_t p);
 
 void f_088f10a4(CPU *c) {
 	uint32_t pa = A0, g = golf(), doc = g ? M32(g + 0x143c) : 0, me = my_index();
+	if (ended && !actor_swapped && doc && pa && me < M8(doc + 0xc1) && M32(pa + 0x1764) && M32(pa + 0x1770)) {
+		// The scene takes player 0's things from slot 0: with three players or more the slot of this
+		// copy's player's may be the other one, the first player's too (nothing but the sky drawn).
+		uint32_t k = actor_slot_of(pa, me);  // where the actor keeps this player's things now
+		if (k) swap_mem(pa + 0x1914, pa + 0x1914 + k * 0x18, 0x18);
+	}
 	if (ended && !actor_swapped && doc && pa && me != 0 && me < M8(doc + 0xc1) && M32(pa + 0x1764) && M32(pa + 0x1770)) {
 		swap_mem(doc + 0x2a4, doc + 0x2a4 + me * 0x68, 0x68);
 		swap_mem(M32(pa + 0x1764), M32(pa + 0x1764) + me * 0x410, 0x410);
 		swap_mem(M32(pa + 0x1770), M32(pa + 0x1770) + me * 0xb8, 0xb8);
-		uint32_t k = actor_slot_of(pa, me);  // where the actor keeps this player's things now
-		if (k) swap_mem(pa + 0x1914, pa + 0x1914 + k * 0x18, 0x18);
 		swap_mem(pa + 0x17d4, pa + 0x17d4 + me * 0x50, 0x50);  // whole blocks (from +0x17e0, player 3's reached +0x1914)
 		facials_me = me;
 		swap_facials(pa);
@@ -1684,6 +1688,27 @@ void f_088a2070(CPU *c) {
 	uint32_t doc = M32(g + 0x143c);
 	if (!doc || !M32(doc + 0xa8)) return;
 	if (rl) rule = rl;
+	// This copy's record (the room's list of players: the boards' "Hole Out") went back to 0 whenever
+	// a player took the stance (mode 8, FUN_088c45c0: a network round's own player plays again
+	// there), and back to its player's state after: in turns, from this player's hole out to the
+	// next hole, the name and "Hole Out" took turns on the boards. It keeps its player's state.
+	uint32_t me_rec = my_index(), rb0 = M32(g + 0xfa4), re0 = M32(g + 0xfa8);
+	if (me_rec < M8(doc + 0xc1) && rb0 && re0 > rb0 && me_rec < (re0 - rb0) / 0x1d0)
+		M8(rb0 + me_rec * 0x1d0 + 0x68) = (uint8_t)M32(doc_player(doc, me_rec));
+	static int dbg_status = -1;  // tests (PANGYA_DBG_STATUS=1): every change of a record's status logged
+	if (dbg_status < 0) dbg_status = env_on("PANGYA_DBG_STATUS");
+	if (dbg_status) {
+		static uint8_t seen[8] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+		uint32_t rb = M32(g + 0xfa4), re = M32(g + 0xfa8), nr = rb && re > rb ? (re - rb) / 0x1d0 : 0;
+		for (uint32_t i = 0; i < nr && i < 8; i++) {
+			uint8_t st = M8(rb + i * 0x1d0 + 0x68);
+			float tm;
+			memcpy(&tm, MP(rb + i * 0x1d0 + 0x140), 4);
+			if (st != seen[i]) rt_log("DBG status: record %u %u -> %u (timer %.1f, hole %u, mode %x, turn %u)", i, seen[i], st, tm,
+			                          M8(doc + 0x156), M32(doc + 0x144), M8(doc + 0x161));
+			seen[i] = st;
+		}
+	}
 	uint32_t mode = M32(doc + 0x144), turn = M8(doc + 0x161), me = my_index();
 	// A hole after the first starts with a wait (mode 1, FUN_088a5568) until no other player's state
 	// (each copy sends its player's, 0x23) says 1, done with the hole before. The game sets its

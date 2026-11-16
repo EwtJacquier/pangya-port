@@ -295,12 +295,14 @@ HOLLOW = [(r'score_text', '15pt_no', (255, 255, 255, 255))]
 # Sprites left as the game's own pictures (the HD pack's, when it is on): no vector text over them
 # (the user's choice): the big letters of a shot's result (PAR, BIRDIE, EAGLE, HOLE IN ONE, BOGEY,
 # OB, WATER HAZARD, GIVE UP, CHIP IN...), the ones in the same art before a shot (For BIRDIE, For
-# EAGLE, For WIN, Your Turn, Approach Shot) and the course names on Free Round's course banners, beside
-# the difficulty stars (the line under them, the course's description, stays vector text).
+# EAGLE, For WIN, Your Turn, Approach Shot), "Loading results...", the "Loading..." balloons, and
+# the course names on Free Round's course banners, beside the difficulty stars (the line under
+# them, the course's description, stays vector text).
 # (atlas, sprite name, label text or None for any): full matches.
 COURSES = 'Blue Lagoon|Pink Wind|White Wiz|West Wiz|Blue Moon|Sepia Wind|Wiz Wiz|Wind Hill|Deep Inferno'
 AS_TEXTURE = [(r'result_font_0[12]', r'.*', None), (r'\[font_ob_giveup', r'.*', None), (r'\[font_waterhazard', r'.*', None),
-              (r'\[font_mission_success', r'chipin_.*', None), (r'stroke_[234]', r'.*', COURSES)]
+              (r'\[font_mission_success', r'chipin_.*', None), (r'nexthole', r'resultload', None),
+              (r'menu_loading|now_loading', r'.*', None), (r'stroke_[234]', r'.*', COURSES)]
 
 
 def as_texture(atlas, name, text=None):

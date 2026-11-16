@@ -292,6 +292,20 @@ EXTRA_SPRITES = Path(__file__).with_name('sprites.tsv')
 # Glyph sets drawn as outlines only, the letters themselves clear (the scoreboard's shot counts,
 # score_text 15pt_no, tinted by the game): (atlas, set, outline colour). Fitted in that look.
 HOLLOW = [(r'score_text', '15pt_no', (255, 255, 255, 255))]
+# Sprites left as the game's own pictures (the HD pack's, when it is on): no vector text over them
+# (the user's choice): the big letters of a shot's result (PAR, BIRDIE, EAGLE, HOLE IN ONE, BOGEY,
+# OB, WATER HAZARD, GIVE UP, CHIP IN...), the ones in the same art before a shot (For BIRDIE, For
+# EAGLE, For WIN, Your Turn, Approach Shot) and the course names on Free Round's course banners, beside
+# the difficulty stars (the line under them, the course's description, stays vector text).
+# (atlas, sprite name, label text or None for any): full matches.
+COURSES = 'Blue Lagoon|Pink Wind|White Wiz|West Wiz|Blue Moon|Sepia Wind|Wiz Wiz|Wind Hill|Deep Inferno'
+AS_TEXTURE = [(r'result_font_0[12]', r'.*', None), (r'\[font_ob_giveup', r'.*', None), (r'\[font_waterhazard', r'.*', None),
+              (r'\[font_mission_success', r'chipin_.*', None), (r'stroke_[234]', r'.*', COURSES)]
+
+
+def as_texture(atlas, name, text=None):
+    return any(re.fullmatch(a, atlas) and re.fullmatch(n, name) and (t is None or (text is not None and re.fullmatch(t, text)))
+               for a, n, t in AS_TEXTURE)
 
 
 def sprite_lists(index):
@@ -759,6 +773,7 @@ def main():
     only = set(args.only.split(',')) if args.only else None
     atlases, jobs, glyph_jobs, group_of, boxed = {}, [], [], {}, set()
     sprite_rects = {}  # every sprite of each atlas (the runtime upscales each within its own)
+    name_of = {}  # (atlas, rect) -> its sprite's name
     for atlas, lst in sorted(sprite_lists(index).items()):
         if only and atlas not in only:
             continue
@@ -790,6 +805,7 @@ def main():
             if not g[1].isprintable() or g[1] == ' ':
                 continue
             seen.add(rect)
+            name_of[(atlas, rect)] = name
             crop = img.crop((x, y, x + w, y + h))
             c = g[1]
             # font3_m draws "M": a letter may be in the other case when the set lacks that case (not
@@ -805,6 +821,7 @@ def main():
             if rect in seen or x + w > img.width or y + h > img.height:
                 continue
             seen.add(rect)
+            name_of[(atlas, rect)] = name
             crop = img.crop((x, y, x + w, y + h))
             jobs.append((atlas, rect, crop.size, crop.tobytes(), text, None) + ((sb,) if sb else ()))
             group_of[(atlas, rect)] = 'lab:' + (name if re.fullmatch(SOLO, atlas) else style_key(name)) + ('|' if '|' in text else '')
@@ -1028,6 +1045,9 @@ def main():
                 continue
             for e in out:
                 x, y, w, h = e['rect']
+                # left out after fitting: the sprites fitted with them as a group keep their look
+                if as_texture(atlas, name_of.get((a, rect), ''), e['text']):
+                    continue
                 if e['kind'] == 'S' and glossy.get((atlas, group_of.get((a, rect)))):
                     e = dict(e, fit=glossy_look(e['fit'], glossy[(atlas, group_of.get((a, rect)))]))
                 extra = ''

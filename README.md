@@ -38,14 +38,16 @@ browser tab, and to play it together again.
 - **The whole game**, translated to native code: story, tour, the 18 characters, every course,
   shops, collection, movies, music and voices.
 - **4x internal resolution** (1920x1088), smooth 60 frames per second.
-- **HD textures**: every one of the game's ~5,000 textures was remade with the
-  [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) anime model at 4x, and each one was checked
-  against its original. They come as a separate download and never change the game's files: turn
+- **HD textures**: every one of the game's ~5,000 textures was remade at 4x, most with the
+  [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) anime model; menu illustrations, interface
+  art and lettering, and course textures where that fell short were redrawn with OpenAI's image
+  models. Each one was checked against its original. They come as a separate download and never change the game's files: turn
   them off and on in the settings menu.
 - **Vector text**: the game's words redrawn sharp with a font at the render scale, in its own
   colors and outlines: the lines it writes as it runs (menus, descriptions, messages) and the
   words baked into its interface art (titles, buttons, the HUD's digits), over the HD textures
-  when they are on.
+  when they are on. The big lettering (a shot's result: PAR, BIRDIE, HOLE IN ONE, OB...; For
+  BIRDIE, Your Turn...) and the course names on Free Round's banners keep the textures' own art.
 - **A browser version**: the game in a tab, with a settings menu (Esc): fullscreen, keyboard keys
   and gamepad buttons, internal resolution, HD textures, vector text.
 - **Players**: each player logs in and keeps their own save; their name is their nickname online.
@@ -104,7 +106,7 @@ your UMD ─▶ ISO ─▶ EBOOT.BIN (encrypted) ─▶ EBOOT_decrypted.elf
 | **FFmpeg** (PPSSPP's builds) | ATRAC3/ATRAC3+ music and voices, H.264 movies |
 | **LiveKit** (WebRTC) | online play: the game's network messages between players |
 | **Ghidra** (optional) | the analysis that found every function (already done: `re/export/`) |
-| **Real-ESRGAN** | how the HD textures were made (`realesrgan-x4plus-anime`, 4x) |
+| **Real-ESRGAN**, **OpenAI image models** | how the HD textures were made (`realesrgan-x4plus-anime` at 4x; `gpt-image` redraws) |
 
 ## What you need
 
@@ -244,9 +246,11 @@ python3 tools/textures.py install ~/Downloads/pangya-hd-textures-*.zip
 python3 tools/textures.py status
 ```
 
-Every texture of the game was upscaled 4x with Real-ESRGAN's anime model
-(`realesrgan-x4plus-anime`) and compared with its original; broken results were made again. The
-pack also brings an **HD font**: the glyphs of the game's own font, upscaled the same way, for the
+Every texture of the game was upscaled 4x and compared with its original. Most (4,849) come from
+Real-ESRGAN's anime model (`realesrgan-x4plus-anime`); 185 (menu illustrations, interface art and
+lettering, course textures where the plain upscale fell short) were redrawn with OpenAI's image
+models (`gpt-image`), fitted back onto the original's place and outline and reviewed one by one;
+8 plain ones are a sharp resize. The pack also brings an **HD font**: the glyphs of the game's own font, upscaled the same way, for the
 lines the game writes as it runs (menus, descriptions, messages), so they are sharp too and keep
 their look. The pack only **adds** files in `build/textures`: the game looks each texture up while
 it runs and draws the HD version in its place, so your ISO and the game's files never change.

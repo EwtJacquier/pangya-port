@@ -1,5 +1,7 @@
 # Pangya: Fantasy Golf — PC & browser port
 
+If you enjoy this port and feel like it, you can [buy me a coffee](https://buymeacoffee.com/ewtjacquier). Thank you!
+
 A fan-made port of **Pangya: Fantasy Golf** (PSP, 2008) that runs natively on Linux and **in the
 browser**, at high resolution, with HD textures, accounts for each player and **online play with
 friends**. It is not an emulator: the game's own program was translated, function by function,

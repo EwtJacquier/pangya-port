@@ -2,7 +2,8 @@
 //
 // The pack is a folder: index.txt lists one replacement per line, "<key> <iw> <ih> <file>", and
 // each file is a QOI image. <key> is CRC-32 then Adler-32 (16 hex digits) of the RGBA bytes of the
-// picture's own iw x ih texels, the top-left corner of the texture the game uploads; the image is
+// picture's own iw x ih texels, the top-left corner of the texture the game uploads (of the next
+// powers of two, else named after the file: "<key> <iw> <ih> <file> <tw> <th>"); the image is
 // that picture at an integer scale. Native: PANGYA_TEXTURES (default build/textures). Web: the page
 // writes index.txt to /textures and the images are fetched when first needed. A new index.txt is
 // read again while the game runs. Nothing of the game's own files changes: without the pack (or

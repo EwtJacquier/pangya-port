@@ -257,10 +257,26 @@ static bool next_video_frame(Player *p) {
 
 static uint8_t clamp8(int v) { return (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v); }
 
+// Where movie frames went lately (rt_psmf_frame_at: the texture catalog and the movie log leave them out).
+static struct { uint32_t addr, bytes; uint64_t us; } recent[4];
+bool rt_psmf_frame_at(uint32_t addr) {
+	uint64_t now = rt_now_us();
+	addr &= 0x0FFFFFFFu;
+	for (int i = 0; i < 4; i++)
+		if (recent[i].bytes && now - recent[i].us < 3000000 && addr - recent[i].addr < recent[i].bytes) return true;
+	return false;
+}
+
 static void write_frame(Player *p, uint32_t dst, int stride) {
 	AVFrame *f = p->vframe;
 	int w = f->width < 480 ? f->width : 480, h = f->height < 272 ? f->height : 272;
 	if (!rt_valid(dst, (uint32_t)(stride * h * 4))) return;
+	{
+		int i = 0;
+		while (i < 3 && recent[i].addr != (dst & 0x0FFFFFFFu)) i++;
+		if (recent[i].addr != (dst & 0x0FFFFFFFu)) memmove(recent + 1, recent, sizeof recent[0] * 3), i = 0;
+		recent[i].addr = dst & 0x0FFFFFFFu, recent[i].bytes = (uint32_t)(stride * h * 4), recent[i].us = rt_now_us();
+	}
 	uint32_t *o = (uint32_t *)MP(dst);
 	for (int y = 0; y < h; y++) {
 		const uint8_t *Y = f->data[0] + y * f->linesize[0];

@@ -46,16 +46,17 @@ clean:
 
 # ---- WebAssembly build (tools/build_web.sh sets up the Emscripten environment) -------------
 EMCC ?= emcc
-WEB_CFLAGS = -std=gnu11 -O2 -fno-strict-aliasing -fwrapv -Iruntime -Igenerated -I$(FFMPEG)/include -w
+WEB_CFLAGS = -std=gnu11 -O2 -msimd128 -fno-strict-aliasing -fwrapv -Iruntime -Igenerated -I$(FFMPEG)/include -w
 WGEN_OBJ = $(patsubst generated/%.c,build/wgen/%.o,$(GEN_SRC))
 WRT_OBJ = $(patsubst runtime/%.c,build/wrt/%.o,$(RT_SRC))
 WMOD_OBJ = $(patsubst mods/%.c,build/wmods/%.o,$(MOD_SRC))
 WEB_LIBS = $(FFMPEG)/wasm32/lib/libavcodec.a $(FFMPEG)/wasm32/lib/libswresample.a $(FFMPEG)/wasm32/lib/libavutil.a
-WEB_LDFLAGS = -O2 -sASYNCIFY -sINITIAL_MEMORY=512MB -sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=2GB -sSTACK_SIZE=1MB \
+WEB_LDFLAGS = --emit-symbol-map -O2 -msimd128 -sASYNCIFY -sINITIAL_MEMORY=512MB -sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=2GB -sSTACK_SIZE=1MB \
 	-sMAX_WEBGL_VERSION=2 -sMIN_WEBGL_VERSION=2 -sFULL_ES3 -lidbfs.js -sFORCE_FILESYSTEM -sINVOKE_RUN=0 \
 	-sEXPORTED_RUNTIME_METHODS=callMain,FS,ENV,IDBFS,addRunDependency,removeRunDependency \
 	-sEXPORTED_FUNCTIONS=_main --preload-file generated/image.bin@/image.bin $(WEB_EXTRA_FILES) \
-	--shell-file web/shell.html --pre-js web/audio.js --pre-js web/net.js
+	--shell-file web/shell.html --pre-js web/audio.js --pre-js web/net.js $(WEB_PROF)
+# make web WEB_PROF=--profiling-funcs: function names in the wasm (for the browser's profiler)
 WEB_EXTRA_FILES = $(if $(wildcard assets/fonts/*),--preload-file assets/fonts@/assets/fonts) \
 	$(if $(wildcard generated/ui_text.spec),--preload-file generated/ui_text.spec@/generated/ui_text.spec)
 WEB_EXTRA_DEPS = $(wildcard assets/fonts/*) $(wildcard generated/ui_text.spec)

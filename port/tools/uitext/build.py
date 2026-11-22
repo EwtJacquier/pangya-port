@@ -305,6 +305,23 @@ AS_TEXTURE = [(r'result_font_0[12]', r'.*', None), (r'\[font_ob_giveup', r'.*', 
               (r'menu_loading|now_loading', r'.*', None), (r'stroke_[234]', r'.*', COURSES)]
 
 
+# Sprites drawn without the soft glow the fit gave them (the user's call: a blurred shadow leaking
+# around the letters): the replay's F.F and Replay, "Moving to the next hole", "Pangya Shop".
+# (atlas, sprite name, label text or None for any): full matches.
+NO_GLOW = [(r'gui_uv_2', r'icon_skip|icon_replay', None), (r'nexthole', r'holeload', None),
+           (r'.*', r'.*', r'Pangya Shop')]
+# Sprites drawn in another sprite's look (its outlines' widths and colours, fill, font, weight), each
+# at its own place and size: Free Round's options under the cursor all as "Random" (Front, Sequence,
+# Holes, 9-H and 18-H had come out with a thicker white and a thinner blue outline; the user's call).
+# (atlas, sprite names, the sprite whose look they take).
+LOOK_LIKE = [(r'stroke_1|multi_room_setting', r'txt_(front|sequence|holes|9hole|18hole|back)_on_C', 'txt_shuffle_on_C')]
+
+
+def no_glow(atlas, name, text=None):
+    return any(re.fullmatch(a, atlas) and re.fullmatch(n, name) and (t is None or (text is not None and re.fullmatch(t, text)))
+               for a, n, t in NO_GLOW)
+
+
 def as_texture(atlas, name, text=None):
     return any(re.fullmatch(a, atlas) and re.fullmatch(n, name) and (t is None or (text is not None and re.fullmatch(t, text)))
                for a, n, t in AS_TEXTURE)
@@ -1040,6 +1057,12 @@ def main():
                     x, y, w, h = e['rect']
                     glossy.setdefault((a, group_of.get((a, rect))), []).append(atlases[a].crop((x, y, x + w, y + h)))
     glossy = {k: glossy_colors(v) for k, v in glossy.items()}
+    # LOOK_LIKE: each atlas's model sprites, by name
+    models = {}
+    for (a, rect), out in results.items():
+        for pat, _, model in LOOK_LIKE:
+            if re.fullmatch(pat, a) and name_of.get((a, rect)) == model and len(out) == 1 and out[0]['kind'] == 'S':
+                models[(a, model)] = out[0]['fit']
     for atlas, img in atlases.items():
         kept = []
         for (a, rect), out in sorted(results.items()):
@@ -1047,6 +1070,14 @@ def main():
                 continue
             for e in out:
                 x, y, w, h = e['rect']
+                name = name_of.get((a, rect), '')
+                if no_glow(atlas, name, e['text']) and e['fit'].get('glow'):
+                    e = dict(e, fit=dict(e['fit'], glow=None))
+                for pat, names, model in LOOK_LIKE:
+                    m = models.get((atlas, model))
+                    if m and e['kind'] == 'S' and re.fullmatch(pat, atlas) and re.fullmatch(names, name):
+                        e = dict(e, fit=dict(e['fit'], rings=m['rings'], ft=m['ft'], fb=m['fb'], font=m['font'], bold=m['bold'],
+                                             ext=m.get('ext', 0.0), glow=m.get('glow')))
                 # left out after fitting: the sprites fitted with them as a group keep their look
                 if as_texture(atlas, name_of.get((a, rect), ''), e['text']):
                     continue

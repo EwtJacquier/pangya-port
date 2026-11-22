@@ -4,6 +4,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// BOUNDINGBOX: whether any of the next count vertices can be on screen (the GE's test; BJUMP
+// skips the drawing that follows when not). The vertex (or index) address moves past them.
+bool ge_bounding_box(uint32_t count);
 void ge_init(void);
 void ge_command(uint32_t cmd, uint32_t data, uint32_t addr);
 // Texture showing the displayed framebuffer; *src_w x *src_h is its visible 480x272 area in texels.

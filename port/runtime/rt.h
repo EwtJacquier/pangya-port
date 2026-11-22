@@ -97,3 +97,10 @@ void audio_init(void);
 void audio_pump(void);  // run the audio DMA up to now and hand the mix to the host
 uint64_t audio_output_latency_us(void);  // from the DMA playing a frame to it being heard
 void audio_stats(uint64_t *underrun, uint64_t *mixed, uint32_t *min_margin);
+
+// ---- movies and the renderer (psmf.c, ge.c) ----------------------------------
+bool rt_psmf_frame_at(uint32_t addr);  // a movie wrote its frames there lately
+void rt_texture_decoded(uint32_t *px, int w, int h);  // mods may define it: a texture's RGBA as decoded (runtime/ge.c)
+extern uint32_t rt_scene;             // mods: what the game is showing (ge.c PANGYA_TEXCATALOG names textures by it)
+// The HD picture of the movie frame at addr (w x h RGBA standing for its iw x ih texels), or px NULL
+void ge_movie_hd(uint32_t addr, const uint32_t *px, int w, int h, int iw, int ih);

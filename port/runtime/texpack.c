@@ -12,7 +12,8 @@
 typedef struct {
 	uint64_t key;
 	uint16_t iw, ih;
-	uint8_t state;  // 0 not asked for yet, 1 being fetched (web), 2 failed
+	uint8_t lw, lh;  // the texture it is in: log2 of its width and height
+	uint8_t state;   // 0 not asked for yet, 1 being fetched (web), 2 failed
 	char file[72];
 } Entry;
 
@@ -162,21 +163,27 @@ static void load_index(void) {
 	char line[256];
 	int cap = 0;
 	while (fgets(line, sizeof line, f)) {
+		// "key w h file", the picture in the corner of a texture of the next powers of two, or
+		// "key w h file tw th" (a picture much smaller than its texture: a portrait 272 texels wide
+		// in rows of 272, in a texture 512 x 256)
 		char file[72];
 		unsigned long long key;
-		int iw, ih;
-		if (line[0] == '#' || sscanf(line, "%16llx %d %d %71s", &key, &iw, &ih, file) != 4) continue;
+		int iw, ih, tw = 0, th = 0;
+		int n = line[0] == '#' ? 0 : sscanf(line, "%16llx %d %d %71s %d %d", &key, &iw, &ih, file, &tw, &th);
+		if (n != 4 && n != 6) continue;
 		if (iw <= 0 || ih <= 0 || iw > 1024 || ih > 1024 || strchr(file, '/')) continue;
+		if (n == 4 || tw < iw || th < ih || tw > 1024 || th > 1024) tw = iw, th = ih;
 		if (nents == cap) ents = realloc(ents, sizeof(Entry) * (size_t)(cap = cap ? cap * 2 : 256));
 		Entry *e = &ents[nents++];
 		memset(e, 0, sizeof *e);
 		e->key = key, e->iw = (uint16_t)iw, e->ih = (uint16_t)ih;
+		e->lw = (uint8_t)log2i(tw), e->lh = (uint8_t)log2i(th);
 		snprintf(e->file, sizeof e->file, "%s", file);
 	}
 	fclose(f);
 	qsort(ents, (size_t)nents, sizeof(Entry), cmp_entry);
 	for (int i = 0; i < nents; i++) {
-		int lw = log2i(ents[i].iw), lh = log2i(ents[i].ih);
+		int lw = ents[i].lw, lh = ents[i].lh;
 		Size *s = sizes[lw][lh];
 		int n = nsizes[lw][lh], k = 0;
 		while (k < n && (s[k].iw != ents[i].iw || s[k].ih != ents[i].ih)) k++;
@@ -221,6 +228,12 @@ bool texpack_set_enabled(bool on) {
 	return true;
 }
 
+uint64_t texpack_entry_key(int idx, int *iw, int *ih) {
+	if (idx < 0 || idx >= nents) return 0;
+	*iw = ents[idx].iw, *ih = ents[idx].ih;
+	return ents[idx].key;
+}
+
 static int find_slow(const uint32_t *px, int w, int h) {  // a key for each possible size, one by one
 	int lw = log2i(w), lh = log2i(h);
 	for (int k = 0; k < nsizes[lw][lh]; k++) {
@@ -239,12 +252,6 @@ static int find_slow(const uint32_t *px, int w, int h) {  // a key for each poss
 // along it reaches each possible width, the row's CRC and Adler so far (crc_update and
 // adler_update go on from where they stopped) join that width's key, combined (zlib's way), and
 // at each possible height the key is looked up.
-uint64_t texpack_entry_key(int idx, int *iw, int *ih) {
-	if (idx < 0 || idx >= nents) return 0;
-	*iw = ents[idx].iw, *ih = ents[idx].ih;
-	return ents[idx].key;
-}
-
 int texpack_find(const uint32_t *px, int w, int h) {
 	if (!enabled || !nents) return -1;
 	int lw = log2i(w), lh = log2i(h);
@@ -390,10 +397,19 @@ uint8_t *texpack_file(const char *name, size_t *n, int *state) {
 	snprintf(path, sizeof path, "%s/%s", dir, name);
 	uint8_t *d = read_all(path, n);
 	if (d) return d;
+	struct stat est;
+	if (stat(path, &est) == 0) {  // there but empty: none (the page's server answers so for an HD movie it hasn't)
+		*state = 2;
+		return NULL;
+	}
 	if (remote) {
 		if (*state == 0) {
 			char url[200];
 			snprintf(url, sizeof url, "textures/%s", name);
+			char sub[600];  // a file in a folder of the pack (movies/): the folder made here first
+			snprintf(sub, sizeof sub, "%s", path);
+			char *slash = strrchr(sub, '/');
+			if (slash && slash > sub + strlen(dir)) *slash = 0, mkdir(sub, 0755);
 			plat_fetch(url, path);
 			*state = 1;
 			return NULL;

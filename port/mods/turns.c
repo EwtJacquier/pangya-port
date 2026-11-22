@@ -1371,6 +1371,77 @@ static void clubs(uint32_t doc, uint32_t mode, uint32_t turn, uint32_t me) {
 	rt_call_guest(0x0894c8d8u, CLUB_OBJ, h->club, 0);
 }
 
+// ---- the camera ---------------------------------------------------------------------------------
+// The player whose turn it is moves the camera: left and right turn it with the aim, triangle
+// shows the top view (mode 0x200: zoom and move), up flies over the hole (0x100). The others saw
+// none of it: the game sends the aim (0x24 ' ': the others' doc aim follows), but their camera's
+// view stayed where the turn began. The camera (CCamera, its update FUN_088d016c) keeps its view
+// at CAM_MATRIX: three rows of the rotation and the eye, read by the drawing and turned frame by
+// frame from where it was. The player's copy sends that view whenever it changes (every other
+// frame at most, once a second while it doesn't) in the stance and the views taken from it; the
+// others put it in place after their own camera's update, while they stand in that player's turn
+// on the same stroke. From the shot on, each copy's camera follows the ball by itself (the shot is
+// replayed there a little later). The others see that view under their own stance's HUD: the top
+// view's aim line and hints stay the player's. About 30 messages of 56 bytes a second while the
+// camera moves, one a second while it rests. PANGYA_NET_CAMERA=0 leaves each copy's camera its own.
+#define CAM_MATRIX 0x08be4c10u
+#define CAM_BYTES 0x30u
+#define CAM_FRESH 90  // vblanks a view received is put in place for
+enum { MSG_CAM = 7 };
+typedef struct {
+	uint8_t player, hole, stroke, pad;
+	uint32_t mode;
+	uint8_t m[CAM_BYTES];
+} Cam;
+static Cam cam_in[MAX_PLAYERS];
+static uint64_t cam_at[MAX_PLAYERS];
+
+static bool camera_view_mode(uint32_t mode) {
+	return mode == MODE_STAND || mode == MODE_READY || mode == MODE_GAUGE || mode == 0x100 || mode == 0x200;
+}
+
+static void camera_sync(void) {
+	static int on = -1;
+	if (on < 0) on = !getenv("PANGYA_NET_CAMERA") || atoi(getenv("PANGYA_NET_CAMERA")) != 0;
+	uint32_t g = golf(), doc = g && M8(g + GOLF_TYPE) == 8 ? M32(g + 0x143c) : 0;
+	if (!on || !doc || !M32(doc + 0xa8)) return;
+	uint32_t mode = M32(doc + 0x144), turn = M8(doc + 0x161), me = my_index(), hole = M8(doc + 0x156);
+	uint64_t now = rt_vblank_count();
+	Cam m;
+	while (net_mod_recv(MSG_CAM, NULL, &m, sizeof m) == (int)sizeof m)
+		if (m.player < MAX_PLAYERS && m.player != me) cam_in[m.player] = m, cam_at[m.player] = now;
+	if (turn >= MAX_PLAYERS) return;
+	if (turn == me) {
+		static Cam sent;
+		static uint64_t sent_at;
+		if (!camera_view_mode(mode)) return;
+		Cam s = {.player = (uint8_t)me, .hole = (uint8_t)hole, .stroke = *strokes_of(doc, me), .mode = mode};
+		memcpy(s.m, MP(CAM_MATRIX), CAM_BYTES);
+		bool changed = memcmp(&s, &sent, sizeof s) != 0;
+		if ((changed && now - sent_at >= 2) || now - sent_at >= 60) {
+			net_mod_send(MSG_CAM, &s, sizeof s);
+			if (sent.mode != s.mode) rt_log("turns: this copy's camera goes to the others (mode %x)", mode);
+			sent = s, sent_at = now;
+		}
+		return;
+	}
+	const Cam *h = &cam_in[turn];
+	bool standing = mode == MODE_STAND || mode == MODE_READY || mode == MODE_GAUGE;
+	if (!standing || !cam_at[turn] || now - cam_at[turn] > CAM_FRESH || h->hole != hole || h->stroke != *strokes_of(doc, turn))
+		return;
+	static uint32_t shown_mode = ~0u;
+	if (h->mode != shown_mode) {
+		rt_log("turns: player %u's camera shown here (their mode %x, this copy's %x)", turn, h->mode, mode);
+		shown_mode = h->mode;
+	}
+	memcpy(MP(CAM_MATRIX), h->m, CAM_BYTES);
+}
+
+void f_088d016c(CPU *c) {
+	f_088d016c_orig(c);
+	camera_sync();
+}
+
 // ---- the shots' results ------------------------------------------------------------------------
 // With the same wind the replay lands where the shot did. Should anything still differ, the ball
 // is put where it is for the player: once it rests (the camera going back, mode 0x800), the
@@ -1673,7 +1744,7 @@ void f_088a2070(CPU *c) {
 	uint32_t rl = A0;
 	f_088a2070_orig(c);
 	uint32_t g = golf();
-	if (g && M8(g + GOLF_TYPE) == 5 && M32(g + 0x143c) && M32(M32(g + 0x143c) + 0xa8)) {  // tests: everyone at once
+	if (g && (M8(g + GOLF_TYPE) == 5 || M8(g + GOLF_TYPE) == 0) && M32(g + 0x143c) && M32(M32(g + 0x143c) + 0xa8)) {  // tests: everyone at once, or a single round
 		uint32_t doc = M32(g + 0x143c);
 		autoplay(doc, M32(doc + 0x144), 0, 0);  // each copy's player is player 0
 	}

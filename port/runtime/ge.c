@@ -4,6 +4,7 @@
 // the GPU only rasterizes with one small shader. Every PSP framebuffer address the game draws
 // into becomes an FBO, so render-to-texture and display both work by address.
 #include <GLES3/gl3.h>
+#include <float.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stddef.h>
@@ -21,6 +22,14 @@
 #include "texpack.h"
 #include "platform.h"
 #include "rt.h"
+
+// What differs from game to game. This file is the same in every port (its switches' prefix
+// aside, PANGYA_ here); only these lines are the game's own.
+#define GE_STENCIL_ALPHA 0       // the framebuffer's alpha made from its stencil before it is read (PANGYA_STENCIL_ALPHA)
+#define GE_FBO_CLUT_SKIP 0       // draws reading a framebuffer as a CLUT texture left out (PANGYA_FBO_CLUT=1 draws them)
+#define GE_BLEND_DOUBLE_ALPHA 0  // the double-alpha blend factors double the alpha (1) or the source color (0)
+#define GE_TILES_PACK_KEY 1      // PANGYA_TILES lines name the texture pack's key and picture size (1) or the catalog's (0)
+#define GE_TEXCAT_WHERE 1        // PANGYA_TEXCATALOG lines "key w h fmt addr where frame stride" (1) or "... scene frame" (0)
 
 // ---------------------------------------------------------------------------------------------
 // State
@@ -52,12 +61,19 @@ typedef struct {
 	float x, y, z, w;
 	float u, v;
 	uint8_t c0[4];
-	uint8_t c1[4];
-	float fog;
-	float box[4];  // a sprite's texture rectangle, half a texel in (u0 v0 u1 v1): sampling stays inside
-} GVert;
+	uint8_t c1[4];  // the secondary (specular) color (alpha unused)
+	float fog;      // the fog depth as the GE has it, 1 or more: no fog. Interpolated as it is and
+	                // clamped per pixel (PPSSPP's software rasterizer, the GE): clamping it per vertex
+	                // fogged the middle of big polygons (the jungle's water and ground near the camera)
+} GVert;  // 36 bytes: a match sends ~75,000 a frame to the GPU
+typedef struct {
+	GVert v;
+	float box[4];  // the sprite's texture rectangle, half a texel in (u0 v0 u1 v1): sampling stays inside
+} SVert;  // a sprite's corner
 
-static GLuint prog, vbo, vao;
+static GLuint prog, vbo, ibo, vao;
+static GLuint fill_prog, fill_vao;  // a full-screen triangle of one alpha value (fbo_alpha_from_stencil)
+static GLint fill_u_a;
 static GLuint samplers[32];  // texture filter/wrap combinations (see RenderState.sampler)
 static int rs = 1;
 static int max_scale(void);
@@ -65,6 +81,7 @@ static int ui_filter = 0;  // filter for the 2D interface: 0 GE's own (the defau
 // The game's own textures above 1x (not the pack's, not redrawn text), 2D and 3D: 0 as the GE
 // samples them (the default), 1 xBR, 2 sharp pixels (PANGYA_TEX_FILTER; the page's menu)
 static int tex_filter = 0;           // render scale: framebuffers are rs times the PSP resolution
+static GLint u_atMask;
 static GLint u_tex, u_texEnable, u_tfunc, u_tfuncRGBA, u_colorDouble, u_envColor, u_alphaTest, u_atFunc, u_atRef,
 	u_fogEnable, u_fogColor, u_clearMode, u_uvScale, u_blendDouble, u_ctFunc, u_ctRef, u_ctMask, u_xbr, u_lodBias;
 
@@ -79,6 +96,11 @@ typedef struct {
 	// hash of the 1x pixels written to VRAM tells whether the CPU has replaced them since.
 	bool copy;
 	uint64_t copy_hash, copy_checked;
+	// The PSP's framebuffer alpha is its stencil; here the stencil is the GL stencil buffer, so
+	// before the framebuffer is read as a texture its alpha is made from the stencil again
+	// (fbo_alpha_from_stencil), when something drew into it since and it has a stencil at all.
+	bool stencil_used;
+	uint64_t alpha_synced;
 } Fbo;
 #define MAX_FBOS 32
 static Fbo fbos[MAX_FBOS];
@@ -95,14 +117,20 @@ typedef struct {
 	                   // replacement's own scale (texpack.c), 1 for the texture as the GE has it
 	int pack1;         // a replacement still on its way (web): its index + 1, else 0
 	uint32_t *ui_orig; // ... for a UI atlas with words: its pixels as the game has them (uitext_over)
+	uint32_t *orig;    // ... else its pixels as the game has them (pack_upload: past a picture that
+	                   // covers only a corner of the texture)
 	bool mips;         // a replacement with its mipmaps (sampled smoothly when it shows smaller)
 	uint64_t pack_frame, changed_frame;
 	uint8_t changes;   // contents replaced in consecutive frames (movies): not looked up
 	uint32_t *look;    // its pixels while the pack is still to be looked up for them (look_poll)
 	uint64_t look_key; // ... their content (the memo's key) and whether text.h redraws them
 	bool look_claimed;
-	uint64_t tile_key;  // PANGYA_TILES: the texture pack's key of its picture, and that picture's size
+	uint32_t *up_px;   // a big replacement going to the GPU a strip a frame (pack_poll), into up_tex
+	GLuint up_tex;
+	int up_W, up_H, up_row, up_s;
+	uint64_t tile_key;  // PANGYA_TILES with GE_TILES_PACK_KEY: the pack's key of its picture, the picture's size
 	int tile_iw, tile_ih;
+	uint64_t cat_key;  // PANGYA_TEXCATALOG: its key in the catalog (0: not catalogued, contents that keep changing)
 } TexEntry;
 #define MAX_TEX 512
 static TexEntry texcache[MAX_TEX];
@@ -164,8 +192,8 @@ bool ge_dump_finished(void) {
 static const char *VS =
 	"#version 300 es\n"
 	"layout(location=0) in vec4 a_pos; layout(location=1) in vec2 a_uv;\n"
-	"layout(location=2) in vec4 a_c0; layout(location=3) in vec4 a_c1; layout(location=4) in float a_fog;\n"
-	"layout(location=5) in vec4 a_box;\n"
+	"layout(location=2) in vec4 a_c0; layout(location=3) in vec4 a_c1;\n"
+	"layout(location=4) in float a_fog; layout(location=5) in vec4 a_box;\n"
 	"out vec2 v_uv; out vec4 v_c0; out vec3 v_c1; out float v_fog; flat out vec4 v_box;\n"
 	"void main() { gl_Position = a_pos; v_uv = a_uv; v_c0 = a_c0; v_c1 = a_c1.rgb; v_fog = a_fog; v_box = a_box; }\n";
 
@@ -174,7 +202,7 @@ static const char *FS =
 	"precision highp float;\n"
 	"uniform sampler2D u_tex; uniform int u_texEnable, u_tfunc, u_tfuncRGBA, u_colorDouble, u_alphaTest, u_atFunc;\n"
 	"uniform float u_lodBias;\n"
-	"uniform int u_fogEnable, u_clearMode; uniform vec4 u_envColor; uniform float u_atRef; uniform vec3 u_fogColor;\n"
+	"uniform int u_fogEnable, u_clearMode, u_atMask; uniform vec4 u_envColor; uniform float u_atRef; uniform vec3 u_fogColor;\n"
 	"uniform vec2 u_uvScale; uniform int u_blendDouble, u_ctFunc, u_xbr; uniform ivec3 u_ctRef, u_ctMask;\n"
 	"in vec2 v_uv; in vec4 v_c0; in vec3 v_c1; in float v_fog; flat in vec4 v_box; out vec4 o;\n"
 	// xBR (Hyllian's xBR-lv2 rules, one pass, any scale) for the 2D interface: the PSP draws it at
@@ -271,20 +299,23 @@ static const char *FS =
 	"      vec4 t = u_xbr >= 12 && mag ? sharp(uv * u_uvScale) : u_xbr >= 12 ? texture(u_tex, uv * u_uvScale, u_lodBias)\n"
 	"             : u_xbr >= 8 ? cubic(uv * u_uvScale) : u_xbr >= 4 && mag ? xbr(uv * u_uvScale) : texture(u_tex, uv * u_uvScale, u_lodBias);\n"
 	"      vec3 rgb; float a = c.a;\n"
-	"      if (u_tfunc == 0) { rgb = c.rgb * t.rgb; if (u_tfuncRGBA == 1) a = c.a * t.a; }\n"
-	"      else if (u_tfunc == 1) { rgb = u_tfuncRGBA == 1 ? mix(c.rgb, t.rgb, t.a) : t.rgb; }\n"
-	"      else if (u_tfunc == 2) { rgb = mix(c.rgb, u_envColor.rgb, t.rgb); if (u_tfuncRGBA == 1) a = c.a * t.a; }\n"
-	"      else if (u_tfunc == 3) { rgb = t.rgb; if (u_tfuncRGBA == 1) a = t.a; }\n"
-	"      else { rgb = c.rgb + t.rgb; if (u_tfuncRGBA == 1) a = c.a * t.a; }\n"
+	"      if (u_tfuncRGBA == 2) t.a = 1.0;\n"  /* a framebuffer read as a format without alpha */
+	"      if (u_tfunc == 0) { rgb = c.rgb * t.rgb; if (u_tfuncRGBA >= 1) a = c.a * t.a; }\n"
+	"      else if (u_tfunc == 1) { rgb = u_tfuncRGBA >= 1 ? mix(c.rgb, t.rgb, t.a) : t.rgb; }\n"
+	"      else if (u_tfunc == 2) { rgb = mix(c.rgb, u_envColor.rgb, t.rgb); if (u_tfuncRGBA >= 1) a = c.a * t.a; }\n"
+	"      else if (u_tfunc == 3) { rgb = t.rgb; if (u_tfuncRGBA >= 1) a = t.a; }\n"
+	"      else { rgb = c.rgb + t.rgb; if (u_tfuncRGBA >= 1) a = c.a * t.a; }\n"
 	"      if (u_colorDouble == 1) rgb *= 2.0;\n"
 	"      c = vec4(rgb, a);\n"
 	"    }\n"
 	"    c.rgb += v_c1;\n"
 	"    if (u_alphaTest == 1) {\n"
 	"      float A = floor(clamp(c.a, 0.0, 1.0) * 255.0 + 0.5);\n"
-	"      bool pass = u_atFunc == 0 ? false : u_atFunc == 1 ? true : u_atFunc == 2 ? A == u_atRef :\n"
-	"                  u_atFunc == 3 ? A != u_atRef : u_atFunc == 4 ? A < u_atRef : u_atFunc == 5 ? A <= u_atRef :\n"
-	"                  u_atFunc == 6 ? A > u_atRef : A >= u_atRef;\n"
+	// the PSP compares alpha & mask with ref & mask
+	"      A = float(int(A) & u_atMask); float R = float(int(u_atRef) & u_atMask);\n"
+	"      bool pass = u_atFunc == 0 ? false : u_atFunc == 1 ? true : u_atFunc == 2 ? A == R :\n"
+	"                  u_atFunc == 3 ? A != R : u_atFunc == 4 ? A < R : u_atFunc == 5 ? A <= R :\n"
+	"                  u_atFunc == 6 ? A > R : A >= R;\n"
 	"      if (!pass) discard;\n"
 	"    }\n"
 	// Color test (0 never, 1 always, 2 equal, 3 not equal): games use it as a color key, e.g. the
@@ -297,7 +328,8 @@ static const char *FS =
 	"    if (u_fogEnable == 1) c.rgb = mix(u_fogColor, c.rgb, clamp(v_fog, 0.0, 1.0));\n"
 	"  }\n"
 	"  o = clamp(c, 0.0, 1.0);\n"
-	"  if (u_blendDouble == 1) o.rgb = min(o.rgb * 2.0, vec3(1.0));\n"
+	"  if (u_blendDouble == 1) o.rgb = min(o.rgb * 2.0, vec3(1.0));\n"  // src * 2a as (2 src) * a
+	"  else if (u_blendDouble == 2) o.a = min(o.a * 2.0, 1.0);\n"
 	"}\n";
 
 static GLuint compile(GLenum type, const char *src) {
@@ -314,8 +346,22 @@ static GLuint compile(GLenum type, const char *src) {
 	return s;
 }
 
+static const char *FILL_VS =
+	"#version 300 es\n"
+	"void main() { gl_Position = vec4(gl_VertexID == 1 ? 3.0 : -1.0, gl_VertexID == 2 ? 3.0 : -1.0, 0.0, 1.0); }\n";
+static const char *FILL_FS =
+	"#version 300 es\n"
+	"precision highp float; uniform float u_a; out vec4 o;\n"
+	"void main() { o = vec4(0.0, 0.0, 0.0, u_a); }\n";
+
 void ge_init(void) {
 	texpack_init();
+	fill_prog = glCreateProgram();
+	glAttachShader(fill_prog, compile(GL_VERTEX_SHADER, FILL_VS));
+	glAttachShader(fill_prog, compile(GL_FRAGMENT_SHADER, FILL_FS));
+	glLinkProgram(fill_prog);
+	fill_u_a = glGetUniformLocation(fill_prog, "u_a");
+	glGenVertexArrays(1, &fill_vao);
 	prog = glCreateProgram();
 	glAttachShader(prog, compile(GL_VERTEX_SHADER, VS));
 	glAttachShader(prog, compile(GL_FRAGMENT_SHADER, FS));
@@ -327,25 +373,16 @@ void ge_init(void) {
 	}
 #define U(n) n = glGetUniformLocation(prog, #n)
 	U(u_tex); U(u_texEnable); U(u_tfunc); U(u_tfuncRGBA); U(u_colorDouble); U(u_envColor); U(u_alphaTest);
-	U(u_atFunc); U(u_atRef); U(u_fogEnable); U(u_fogColor); U(u_clearMode); U(u_uvScale); U(u_blendDouble);
+	U(u_atFunc); U(u_atRef); U(u_atMask); U(u_fogEnable); U(u_fogColor); U(u_clearMode); U(u_uvScale); U(u_blendDouble);
 	U(u_ctFunc); U(u_ctRef); U(u_ctMask); U(u_xbr); U(u_lodBias);
 #undef U
 	glGenVertexArrays(1, &vao);
 	glBindVertexArray(vao);
 	glGenBuffers(1, &vbo);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(GVert), (void *)offsetof(GVert, x));
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(GVert), (void *)offsetof(GVert, u));
-	glEnableVertexAttribArray(2);
-	glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(GVert), (void *)offsetof(GVert, c0));
-	glEnableVertexAttribArray(3);
-	glVertexAttribPointer(3, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(GVert), (void *)offsetof(GVert, c1));
-	glEnableVertexAttribArray(4);
-	glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(GVert), (void *)offsetof(GVert, fog));
-	glEnableVertexAttribArray(5);
-	glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(GVert), (void *)offsetof(GVert, box));
+	glGenBuffers(1, &ibo);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);  // (part of the vertex array's state)
+	for (int i = 0; i < 5; i++) glEnableVertexAttribArray(i);  // (pointers set by batch_flush)
 	glUseProgram(prog);
 	glUniform1i(u_tex, 0);
 	// mipmap level bias (only textures with mipmaps, the pack's, are affected); PANGYA_LOD_BIAS
@@ -378,13 +415,13 @@ void ge_init(void) {
 // ---------------------------------------------------------------------------------------------
 // Framebuffers
 // ---------------------------------------------------------------------------------------------
+// The framebuffer at an address: the one drawn last there (a game may draw at one address with two
+// widths in turn, e.g. a 64- and a 512-pixel-wide buffer each frame: both are kept).
 static Fbo *fbo_find(uint32_t vaddr) {
-	for (int i = 0; i < MAX_FBOS; i++) {
-		if (fbos[i].used && fbos[i].addr == vaddr) {
-			return &fbos[i];
-		}
-	}
-	return NULL;
+	Fbo *best = NULL;
+	for (int i = 0; i < MAX_FBOS; i++)
+		if (fbos[i].used && fbos[i].addr == vaddr && (!best || fbos[i].last_draw > best->last_draw)) best = &fbos[i];
+	return best;
 }
 
 static void batch_flush(void);
@@ -476,8 +513,10 @@ static void fbo_alloc(Fbo *f) {
 	}
 	glDisable(GL_SCISSOR_TEST);
 	glDepthMask(GL_TRUE);
+	glStencilMask(0xFF);
 	glClearDepthf(0);
-	glClear(GL_DEPTH_BUFFER_BIT);
+	glClearStencil(0);
+	glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 }
 
 static int max_scale(void) {
@@ -531,10 +570,17 @@ void ge_set_ui_filter(int mode) {
 }
 
 static Fbo *fbo_get(uint32_t vaddr, int width, int height) {
-	Fbo *f = fbo_find(vaddr);
-	if (f && f->width == width && f->height >= height) {
-		return f;
+	static Fbo *last;  // every draw asks for its target
+	if (last && last->used && last->addr == vaddr && last->width == width && last->height >= height) return last;
+	Fbo *f = NULL;
+	int at_addr = 0;
+	for (int i = 0; i < MAX_FBOS; i++) {
+		if (!fbos[i].used || fbos[i].addr != vaddr) continue;
+		at_addr++;
+		if (fbos[i].width == width && fbos[i].height >= height) return last = &fbos[i];
+		if (!f || fbos[i].last_draw < f->last_draw) f = &fbos[i];
 	}
+	if (at_addr < 2) f = NULL;  // a second size at this address gets a framebuffer of its own
 	batch_flush();  // queued draws may target or sample the framebuffer being replaced
 	if (!f) {
 		for (int i = 0; i < MAX_FBOS && !f; i++) {
@@ -568,7 +614,7 @@ static Fbo *fbo_get(uint32_t vaddr, int width, int height) {
 	free(init);
 	gl_invalidate();
 	TRACE("GE: new framebuffer %08x %dx%d", vaddr, width, height);
-	return f;
+	return last = f;
 }
 
 static void bind_target(void) {
@@ -641,8 +687,18 @@ static struct {
 	uint64_t tex, read, over, vec, gpu, mip, poll, hash, dec, find;
 	int n_new, n_pack;
 } prof;
-#define TIMED(field, expr) ({ uint64_t t_ = rt_now_us(); __typeof__(expr) r_ = (expr); prof.field += rt_now_us() - t_; r_; })
-#define TIMED_DO(field, stmt) do { uint64_t t_ = rt_now_us(); stmt; prof.field += rt_now_us() - t_; } while (0)
+// Timed only with PANGYA_HITCH: a clock read costs (in the browser a call out to JavaScript), and a
+// match draws thousands of times a frame.
+static int prof_on = -1;
+static inline bool prof_enabled(void) {
+	if (prof_on < 0) prof_on = getenv("PANGYA_HITCH") && atoi(getenv("PANGYA_HITCH")) > 0;
+	return prof_on;
+}
+#define TIMED(field, expr) ({ __typeof__(expr) r_; \
+	if (prof_enabled()) { uint64_t t_ = rt_now_us(); r_ = (expr); prof.field += rt_now_us() - t_; } \
+	else { r_ = (expr); } \
+	r_; })
+#define TIMED_DO(field, stmt) do { if (prof_enabled()) { uint64_t t_ = rt_now_us(); stmt; prof.field += rt_now_us() - t_; } else { stmt; } } while (0)
 
 void ge_hitch(uint64_t frame_us) {
 	static int ms = -1;
@@ -656,8 +712,15 @@ void ge_hitch(uint64_t frame_us) {
 }
 
 // A replacement texture (pw x ph for the iw x ih texels of a w x h texture) into e->tex at its own
-// scale; texels past the picture repeat its last column and row. False if the GPU can't hold it.
-static bool pack_upload(TexEntry *e, const uint32_t *px, int pw, int ph, int iw, int ih, int w, int h) {
+// scale; texels past the picture are the texture's own (orig, w x h, the game's: a picture that is
+// a corner of its texture, the lab having left out what the game never drew there), else repeat
+// its last column and row. False if the GPU can't hold it.
+// A big one (PACK_STRIPS_FROM texels and up: a 2048x2048 picture is 16 MB) goes to the GPU over
+// several frames instead (pack_poll): sent at once it held a frame up for 25-40 ms in the browser.
+#define PACK_STRIPS_FROM (1024 * 1024)
+#define PACK_STRIP_TEXELS (512 * 1024)
+static void gl_invalidate(void);
+static bool pack_upload(TexEntry *e, const uint32_t *px, int pw, int ph, int iw, int ih, int w, int h, const uint32_t *orig) {
 	static GLint max_size;
 	if (!max_size) glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_size);
 	int s = pw / iw, W = w * s, H = h * s;
@@ -667,10 +730,24 @@ static bool pack_upload(TexEntry *e, const uint32_t *px, int pw, int ph, int iw,
 		full = malloc((size_t)W * H * 4);
 		for (int y = 0; y < H; y++) {
 			const uint32_t *row = px + (size_t)(y < ph ? y : ph - 1) * pw;
+			const uint32_t *own = orig ? orig + (size_t)(y / s) * w : NULL;
 			uint32_t *d = full + (size_t)y * W;
-			memcpy(d, row, (size_t)pw * 4);
-			for (int x = pw; x < W; x++) d[x] = row[pw - 1];
+			if (y < ph || !own) memcpy(d, row, (size_t)pw * 4);
+			else for (int x = 0; x < pw; x++) d[x] = own[x / s];
+			for (int x = pw; x < W; x++) d[x] = own ? own[x / s] : row[pw - 1];
 		}
+	}
+	if ((int64_t)W * H >= PACK_STRIPS_FROM) {  // big: a strip a frame, the original shown meanwhile
+		if (!full) full = malloc((size_t)W * H * 4), memcpy(full, px, (size_t)W * H * 4);
+		glGenTextures(1, &e->up_tex);
+		glBindTexture(GL_TEXTURE_2D, e->up_tex);
+		// (storage that can be filled again: the texture becomes the cache slot's, and the slot
+		// later takes other textures' pixels with glTexImage2D. Made with glTexStorage2D it was
+		// immutable, those uploads failed, and the slot went on showing this picture in their place)
+		TIMED_DO(gpu, glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL));
+		gl_invalidate();
+		e->up_px = full, e->up_W = W, e->up_H = H, e->up_row = 0, e->up_s = s;
+		return true;
 	}
 	if (!e->tex) glGenTextures(1, &e->tex);
 	glBindTexture(GL_TEXTURE_2D, e->tex);
@@ -700,11 +777,36 @@ static void pack_poll_(TexEntry *e) {
 	if (spent_us >= PACK_FRAME_US) return;
 	e->pack_frame = frame_no;
 	uint64_t t0 = rt_now_us();
+	if (e->up_px) {  // a big one on its way: its next strips, within this frame's time
+		batch_flush();
+		glBindTexture(GL_TEXTURE_2D, e->up_tex);
+		int rows = PACK_STRIP_TEXELS / e->up_W > 0 ? PACK_STRIP_TEXELS / e->up_W : 1;
+		while (e->up_row < e->up_H && spent_us + (rt_now_us() - t0) < PACK_FRAME_US) {
+			int n = e->up_H - e->up_row < rows ? e->up_H - e->up_row : rows;
+			TIMED_DO(gpu, glTexSubImage2D(GL_TEXTURE_2D, 0, 0, e->up_row, e->up_W, n, GL_RGBA, GL_UNSIGNED_BYTE,
+			                              e->up_px + (size_t)e->up_row * e->up_W));
+			e->up_row += n;
+		}
+		if (e->up_row >= e->up_H) {  // all there: the mipmaps, then it takes the original's place
+			TIMED_DO(mip, glGenerateMipmap(GL_TEXTURE_2D));
+			if (e->tex) glDeleteTextures(1, &e->tex);
+			e->tex = e->up_tex, e->up_tex = 0;
+			free(e->up_px);
+			e->up_px = NULL;
+			e->scale = (float)e->up_s;
+			e->mips = true;
+			e->pack1 = 0;
+			prof.n_pack++;
+		}
+		gl_invalidate();
+		spent_us += rt_now_us() - t0;
+		return;
+	}
 	int pw, ph, iw, ih;
 	bool failed;
 	uint32_t *px = TIMED(read, texpack_load(e->pack1 - 1, &pw, &ph, &iw, &ih, &failed));
 	if (!px) {
-		if (failed) e->pack1 = 0, free(e->ui_orig), e->ui_orig = NULL;
+		if (failed) e->pack1 = 0, free(e->ui_orig), e->ui_orig = NULL, free(e->orig), e->orig = NULL;
 		return;
 	}
 	uint64_t t1 = rt_now_us();
@@ -721,12 +823,14 @@ static void pack_poll_(TexEntry *e) {
 		e->scale = (float)rs;
 		e->mips = false;
 	} else {  // (text.h stopped drawing the atlas meanwhile: the picture as it is)
-		pack_upload(e, px, pw, ph, iw, ih, e->w, e->h);
+		pack_upload(e, px, pw, ph, iw, ih, e->w, e->h, e->ui_orig ? e->ui_orig : e->orig);
 	}
 	free(e->ui_orig);
 	e->ui_orig = NULL;
+	free(e->orig);
+	e->orig = NULL;
 	free(px);
-	e->pack1 = 0;
+	if (!e->up_px) e->pack1 = 0;  // (a big one keeps coming here for its strips)
 	uint64_t t2 = rt_now_us();
 	spent_us += t2 - t0;
 	static int slow_log = -1;  // PANGYA_TEXPACK_SLOW=ms: the pictures that took longer than that
@@ -763,6 +867,9 @@ static void memo_put(uint64_t k, int pk, bool claimed) {
 	memo[(uint32_t)(k ^ k >> 29) % MEMO_N].claimed = claimed;
 }
 
+// Mods: a texture's pixels as decoded, before the pack is looked up for them (RGBA, w x h).
+__attribute__((weak)) void rt_texture_decoded(uint32_t *px, int w, int h) { (void)px, (void)w, (void)h; }
+
 // A new texture shows at once as the game has it (or its words redrawn) and its pack picture is
 // looked up afterwards, a few milliseconds' worth a frame: a new screen brings tens of textures,
 // and their lookups in the frame they came in held it up (a stutter at every change). The picture
@@ -778,36 +885,380 @@ static void look_poll(TexEntry *e) {
 	if (pk >= 0) {
 		e->pack1 = pk + 1;
 		if (e->look_claimed) e->ui_orig = e->look, e->look = NULL;  // pack_poll draws the words over the picture
+		else free(e->orig), e->orig = e->look, e->look = NULL;      // (pack_upload)
 	}
 	free(e->look);
 	e->look = NULL;
 	spent += rt_now_us() - t0;
 }
 
-static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy);
-// PANGYA_TILES=file (diagnostics, for pictures the game draws in pieces): every 2D draw
-// of a texture the texture pack knows, as "frame fb key iw ih x0 y0 x1 y1 u0 v0 u1 v1" (framebuffer
-// pixels, texels), so pieces laid side by side on the screen can be put together again.
+// The framebuffer's alpha made from its stencil (as the PSP has them: one and the same), before it
+// is read as a texture: games mark pixels in the stencil and read them back as alpha (a glow that
+// takes only the pixels whose alpha has a bit of the glowing objects' stencil value). The alpha is
+// cleared, then each stencil bit adds its value where it is set: 9 full-screen passes, color
+// untouched (a glow that takes only the pixels whose alpha has one bit of it). GE_STENCIL_ALPHA
+// (PANGYA_STENCIL_ALPHA): off where a game reads its framebuffer only for the colors (a bloom): there
+// its fighters came out striped and see-through at high render scales.
+static void fbo_alpha_from_stencil(Fbo *f) {
+	static int on = -1;
+	if (on < 0) on = getenv("PANGYA_STENCIL_ALPHA") ? atoi(getenv("PANGYA_STENCIL_ALPHA")) != 0 : GE_STENCIL_ALPHA;
+	if (!on || !f->stencil_used || f->alpha_synced == f->last_draw) return;
+	batch_flush();
+	f->alpha_synced = f->last_draw;
+	glBindFramebuffer(GL_FRAMEBUFFER, f->fbo);
+	glViewport(0, 0, f->width * rs, f->height * rs);
+	glDisable(GL_SCISSOR_TEST);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_CULL_FACE);
+	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE);
+	glUseProgram(fill_prog);
+	glBindVertexArray(fill_vao);
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_BLEND);
+	glUniform1f(fill_u_a, 0.f);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+	glEnable(GL_STENCIL_TEST);
+	glStencilMask(0);
+	glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+	glEnable(GL_BLEND);
+	glBlendEquation(GL_FUNC_ADD);
+	glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ONE, GL_ONE);
+	for (int b = 0; b < 8; b++) {
+		glStencilFunc(GL_EQUAL, 1 << b, 1u << b);
+		glUniform1f(fill_u_a, (float)(1 << b) / 255.f);
+		glDrawArrays(GL_TRIANGLES, 0, 3);
+	}
+	gl_invalidate();
+}
+
+// PANGYA_DUMP_FBO=vramaddr:dir (diagnostics): every 30 frames, the framebuffer at that VRAM offset as it
+// is read as a texture: dir/fbo_<addr>_<frame>.ppm (color) and _a.pgm (alpha = the PSP's stencil).
+static void fb_read(GLuint fbo, int x, int y, int w, int h, void *dst, int row_len);
+static void fbo_debug_dump(Fbo *f) {
+	static int want = -2;
+	static char dir[256];
+	if (want == -2) {
+		const char *e = getenv("PANGYA_DUMP_FBO");
+		want = -1;
+		if (e && sscanf(e, "%x:%255s", (unsigned *)&want, dir) != 2) want = -1;
+	}
+	if (want < 0 || f->addr != (uint32_t)want || frame_no % 30) return;
+	static uint64_t last;
+	if (last == frame_no) return;
+	last = frame_no;
+	batch_flush();
+	int w = f->width, h = f->height;
+	uint32_t *px = malloc((size_t)w * h * 4);
+	fb_read(f->fbo, 0, 0, w, h, px, w);
+	char path[400];
+	snprintf(path, sizeof path, "%s/fbo_%06x_%06llu.ppm", dir, f->addr, (unsigned long long)frame_no);
+	FILE *o = fopen(path, "wb");
+	if (o) {
+		fprintf(o, "P6 %d %d 255\n", w, h);
+		for (int i = 0; i < w * h; i++) fputc(px[i] & 0xFF, o), fputc((px[i] >> 8) & 0xFF, o), fputc((px[i] >> 16) & 0xFF, o);
+		fclose(o);
+	}
+	snprintf(path, sizeof path, "%s/fbo_%06x_%06llu_a.pgm", dir, f->addr, (unsigned long long)frame_no);
+	if ((o = fopen(path, "wb"))) {
+		fprintf(o, "P5 %d %d 255\n", w, h);
+		for (int i = 0; i < w * h; i++) fputc(px[i] >> 24, o);
+		fclose(o);
+	}
+	free(px);
+	gl_invalidate();
+}
+
+// PANGYA_TEXCATALOG=dir (native, for making HD textures): every texture the game shows, once each
+// (its contents are in packs of encrypted, compressed files, so the catalog learns them from the
+// running game): dir/<key>.rgba (u16 width, u16 height, then RGBA rows) and a line in
+// dir/index.txt "key w h fmt addr scene frame". The key is the texture pack's
+// (texpack_key over the whole texture), so a replacement made from it is found again. Textures
+// whose contents keep changing (movies, things drawn each frame) are left out; a run adds to what
+// earlier runs found. rt_scene (mods: what the game is showing) names where it was seen.
+uint32_t rt_scene;
+static bool tex_sweeping;  // PANGYA_TEXSWEEP is decoding (texture_sweep)
+static const char *texcat_dir = (const char *)1;
+static void texcat_uv_read(void);
+static void texcat_uv_write(void);
+static void texcat_add(TexEntry *slot, const uint32_t *px, int w, int h, int stride, int fmt, uint32_t addr) {
+	static uint64_t *seen;
+	static size_t n_seen, cap_seen;
+	if (texcat_dir == (const char *)1) {
+		const char *dir = texcat_dir = getenv("PANGYA_TEXCATALOG");
+		if (dir) {  // what earlier runs found
+			char path[512];
+			snprintf(path, sizeof path, "%s/index.txt", dir);
+			FILE *f = fopen(path, "r");
+			char line[256];
+			while (f && fgets(line, sizeof line, f)) {
+				unsigned long long k;
+				if (sscanf(line, "%llx", &k) != 1) continue;
+				if (n_seen == cap_seen) cap_seen = cap_seen * 2 + 1024, seen = realloc(seen, cap_seen * sizeof *seen);
+				seen[n_seen++] = k;
+			}
+			if (f) fclose(f);
+			rt_log("texture catalog: %zu textures in %s so far", n_seen, dir);
+			texcat_uv_read();
+			atexit(texcat_uv_write);
+		}
+	}
+	const char *dir = texcat_dir;
+	slot->cat_key = 0;
+	if (!dir || slot->changes >= 2 || w < 4 || h < 4 || rt_psmf_frame_at(addr)) return;
+	uint64_t key = texpack_key(px, w, w, h);
+	if (tex_sweeping) rt_log("texture sweep: %08x %dx%d -> %016llx", addr, w, h, (unsigned long long)key);
+	for (size_t i = 0; i < n_seen && !tex_sweeping; i++)
+		if (seen[i] == key) {
+			slot->cat_key = key;
+			return;
+		}
+	// Contents that keep changing at one place (water, lava, things drawn by the CPU): new ones
+	// within a few frames of each other more than twice. The extractor drops the ones written
+	// before that was clear (the "D" lines).
+	enum { PLACES = 256 };
+	static struct { uint32_t addr; uint64_t frame; int quick; } place[PLACES];
+	int pi = (int)((addr >> 4) * 2654435761u >> 24);
+	if (place[pi].addr != addr) place[pi].addr = addr, place[pi].frame = 0, place[pi].quick = 0;
+	place[pi].quick = place[pi].frame && frame_no - place[pi].frame <= 8 ? place[pi].quick + 1 : 0;
+	place[pi].frame = frame_no;
+	if (place[pi].quick >= 2) {
+		if (place[pi].quick == 2) {
+			char path[512];
+			snprintf(path, sizeof path, "%s/index.txt", dir);
+			FILE *f = fopen(path, "a");
+			if (f) fprintf(f, "D %08x %llu\n", addr, (unsigned long long)frame_no), fclose(f);
+		}
+		return;
+	}
+	if (n_seen == cap_seen) cap_seen = cap_seen * 2 + 1024, seen = realloc(seen, cap_seen * sizeof *seen);
+	seen[n_seen++] = key;
+	slot->cat_key = key;
+	char path[512];
+	snprintf(path, sizeof path, "%s/%016llx.rgba", dir, (unsigned long long)key);
+	FILE *f = fopen(path, "wb");
+	if (!f) return;
+	uint16_t wh[2] = {(uint16_t)w, (uint16_t)h};
+	fwrite(wh, 2, 2, f);
+	fwrite(px, 4, (size_t)w * h, f);
+	fclose(f);
+	snprintf(path, sizeof path, "%s/index.txt", dir);
+	if ((f = fopen(path, "a"))) {
+		// rt_scene, with 0x8000 when the texture is first drawn in 3D (not through mode) and 0x4000 when
+		// on a skinned model (vertex weights: the fighters; stages and effects have none)
+		uint32_t where = rt_scene | ((reg[0x12] >> 23) & 1 ? 0 : 0x8000u) | ((reg[0x12] >> 9) & 3 ? 0x4000u : 0);
+		if (GE_TEXCAT_WHERE)
+			fprintf(f, "%016llx %d %d %d %08x %u %llu %d\n", (unsigned long long)key, w, h, fmt, addr, where, (unsigned long long)frame_no,
+			        stride);
+		else
+			fprintf(f, "%016llx %d %d %d %08x %u %llu\n", (unsigned long long)key, w, h, fmt, addr, rt_scene, (unsigned long long)frame_no);
+		fclose(f);
+	}
+}
+
+// What of each catalogued texture the game draws: how far right and down the texels its draws map
+// reach (2D, and 3D mapped by UV), the most seen, in dir/uv.txt "key u v" (written every few
+// seconds and at the end). A texture's rows may be narrower than it, texels past a row coming
+// from the next one (the character select's portraits: 272 texels in a texture 512 wide), and
+// under the picture comes whatever is next in memory: the extractor keeps the corner drawn.
+enum { TEXCAT_UV = 1 << 14 };
+static struct {
+	uint64_t key;
+	uint16_t u, v;
+} texcat_uv[TEXCAT_UV];
+static bool texcat_uv_dirty;
+
+static void texcat_uv_write(void) {
+	if (!texcat_uv_dirty || !texcat_dir || texcat_dir == (const char *)1) return;
+	texcat_uv_dirty = false;
+	char path[512], tmp[520];
+	snprintf(path, sizeof path, "%s/uv.txt", texcat_dir);
+	snprintf(tmp, sizeof tmp, "%s.tmp", path);
+	FILE *f = fopen(tmp, "w");
+	if (!f) return;
+	for (int i = 0; i < TEXCAT_UV; i++)
+		if (texcat_uv[i].key) fprintf(f, "%016llx %d %d\n", (unsigned long long)texcat_uv[i].key, texcat_uv[i].u, texcat_uv[i].v);
+	fclose(f);
+	rename(tmp, path);
+}
+
+static void texcat_uv_put(uint64_t key, int u, int v) {
+	uint32_t i = (uint32_t)((key * 0x9E3779B97F4A7C15ull) >> 50);
+	for (int n = 0; n < TEXCAT_UV && texcat_uv[i].key && texcat_uv[i].key != key; n++) i = (i + 1) & (TEXCAT_UV - 1);
+	if (texcat_uv[i].key && texcat_uv[i].key != key) return;  // full
+	if (texcat_uv[i].key == key && texcat_uv[i].u >= u && texcat_uv[i].v >= v) return;
+	texcat_uv[i].key = key;
+	if (u > texcat_uv[i].u) texcat_uv[i].u = (uint16_t)u;
+	if (v > texcat_uv[i].v) texcat_uv[i].v = (uint16_t)v;
+	texcat_uv_dirty = true;
+}
+
+static void texcat_uv_read(void) {  // what earlier runs in the folder found
+	char path[512], line[128];
+	snprintf(path, sizeof path, "%s/uv.txt", texcat_dir);
+	FILE *f = fopen(path, "r");
+	unsigned long long k;
+	int u, v;
+	while (f && fgets(line, sizeof line, f))
+		if (sscanf(line, "%llx %d %d", &k, &u, &v) == 3 && k) texcat_uv_put(k, u, v);
+	if (f) fclose(f);
+	texcat_uv_dirty = false;
+}
+
+static void texcat_extent(uint64_t key, const GVert *tv, int count, int tw, int th) {
+	float um = 0, vm = 0;
+	for (int i = 0; i < count; i++) {
+		if (tv[i].u > um) um = tv[i].u;
+		if (tv[i].v > vm) vm = tv[i].v;
+	}
+	int u = (int)ceilf(um * (float)tw - 0.01f), v = (int)ceilf(vm * (float)th - 0.01f);
+	texcat_uv_put(key, u > tw ? tw : u, v > th ? th : v);
+	static uint64_t written;
+	if (texcat_uv_dirty && frame_no - written >= 300) written = frame_no, texcat_uv_write();
+}
+
+// PANGYA_TILES=file[:N] (with PANGYA_TEXCATALOG; for pictures the game draws in pieces, READY! as a
+// texture of 256 and one of 128 side by side): every 2D draw of a catalogued texture (in every Nth
+// frame), "frame fb key iw ih x0 y0 x1 y1 u0 v0 u1 v1" (its catalog key and size, framebuffer
+// pixels, texels), for the lab's mosaics.py.
 static FILE *tiles_f;
-static int tiles_on = -1;
-static const TexEntry *tile_cur;
-static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) {
+static int tiles_on = -1, tiles_every = 1;
+static bool tiles_enabled(void) {
 	if (tiles_on < 0) {
 		const char *e = getenv("PANGYA_TILES");
-		tiles_f = e ? fopen(e, "w") : NULL;
+		char path[512];
+		snprintf(path, sizeof path, "%s", e ? e : "");
+		char *colon = strrchr(path, ':');
+		if (colon && atoi(colon + 1) > 0) tiles_every = atoi(colon + 1), *colon = 0;
+		tiles_f = e ? fopen(path, "a") : NULL;
 		if (tiles_f) setvbuf(tiles_f, NULL, _IOLBF, 0);
 		tiles_on = tiles_f != NULL;
 	}
-	GLuint t = TIMED(tex, texture_get_(tw, th, uvsx, uvsy));
-	if (tiles_on) {
-		tile_cur = NULL;
-		for (int i = 0; t && i < MAX_TEX; i++)
-			if (texcache[i].tex == t) tile_cur = &texcache[i];
-	}
-	return t;
+	return tiles_on;
 }
+// key and its size (kw x kh): the catalog's key and the texture's size, or (GE_TILES_PACK_KEY) the
+// pack's key and its picture's size
+static void tiles_log(uint64_t key, int kw, int kh, const GVert *tv, int count, int type, float fbw, float fbh, int tw, int th,
+                      float uvsx, float uvsy) {
+	FILE *f = tiles_f;
+	if (!tiles_enabled() || frame_no % (uint64_t)tiles_every || !(type == 6 || count <= 6)) return;
+	f = tiles_f;
+	int step = type == 6 ? 2 : count;
+	for (int i = 0; i + step <= count; i += step) {
+		float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f, u0 = 1e30f, v0 = 1e30f, u1 = -1e30f, v1 = -1e30f;
+		for (int k = i; k < i + step; k++) {
+			float x = (tv[k].x + 1) * 0.5f * fbw, y = (1 + tv[k].y) * 0.5f * fbh;  // through mode: w is 1
+			float u = tv[k].u / uvsx * (float)tw, v = tv[k].v / uvsy * (float)th;
+			x0 = fminf(x0, x), y0 = fminf(y0, y), x1 = fmaxf(x1, x), y1 = fmaxf(y1, y);
+			u0 = fminf(u0, u), v0 = fminf(v0, v), u1 = fmaxf(u1, u), v1 = fmaxf(v1, v);
+		}
+		fprintf(f, "%llu %06x %016llx %d %d %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f\n", (unsigned long long)frame_no, cur_fbo->addr,
+		        (unsigned long long)key, kw, kh, x0, y0, x1, y1, u0, v0, u1, v1);
+	}
+}
+
+static int last_slot = -1;  // the cache slot of the last texture texture_get gave
+static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy);
+static GLuint texture_get(int *tw, int *th, float *uvsx, float *uvsy) { return TIMED(tex, texture_get_(tw, th, uvsx, uvsy)); }
+// Test aid for the texture catalog: PANGYA_TEXSWEEP=addr:stride:count:clut_offset[:first]. Once the
+// game draws the texture at addr, the count textures every stride bytes after it (each with its
+// CLUT clut_offset bytes into it; from first strides before it if first < 0) are decoded as if
+// drawn, the same way, and go to the catalog in a group of their own (scene TEXSWEEP_SCENE, also
+// those found before). The rank badges sit in a row in
+// RAM (64x32, 8-bit, stride 0xC60, the CLUT 0x800 in; Beginner first, at 0x08d71470 on the main
+// menu) and the game shows only the player's and the opponent's.
+#define TEXSWEEP_SCENE 100
+static void texture_sweep(uint32_t addr) {
+	static int state = -1;  // -1 not read, 0 off or done, 1 waiting
+	static uint32_t at, stride, count, clut_off;
+	static int first;
+	if (state < 0) {
+		state = 0;
+		const char *e = getenv("PANGYA_TEXSWEEP");
+		if (e && sscanf(e, "%x:%x:%u:%x:%d", &at, &stride, &count, &clut_off, &first) >= 4 && stride && count) state = 1;
+	}
+	if (state != 1 || (addr & 0x0FFFFFFFu) != (at & 0x0FFFFFFFu)) return;
+	state = 0;
+	uint32_t a0 = reg[0xA0], b0 = reg[0xB0], b1 = reg[0xB1], scene = rt_scene;
+	uint8_t saved[sizeof clut];
+	memcpy(saved, clut, sizeof clut);
+	int tw, th;
+	float sx, sy;
+	tex_sweeping = true;
+	rt_scene = TEXSWEEP_SCENE;
+	for (int k = first; k <= (int)count; k++) {
+		uint32_t t = at + (uint32_t)k * stride, cl = t + clut_off;
+		if (!rt_valid(t, stride) || ((t ^ at) & 0x0F000000u)) break;
+		reg[0xA0] = (a0 & 0xFF000000u) | (t & 0xFFFFFFu);
+		reg[0xB0] = (b0 & 0xFF000000u) | (cl & 0xFFFFFFu), reg[0xB1] = (b1 & ~0xF0000u) | ((cl >> 8) & 0xF0000u);
+		memcpy(clut, MP(cl), 1024);
+		clut_dirty = true;
+		texture_get_(&tw, &th, &sx, &sy);
+	}
+	tex_sweeping = false;
+	rt_scene = scene;
+	reg[0xA0] = a0, reg[0xB0] = b0, reg[0xB1] = b1;
+	memcpy(clut, saved, sizeof clut);
+	clut_dirty = true;
+	rt_log("texture sweep: %d textures from %08x", (int)count + 1 - first, at + (uint32_t)first * stride);
+}
+
+// A movie frame's HD picture (runtime/psmf.c): drawn instead of the frame the game wrote at addr,
+// from a texture of the picture's own size (the coordinates scaled to it), sent again only when a
+// new frame comes. The game writes its frames into a few buffers in turn and draws an earlier one:
+// one picture (and texture) each.
+#define MOVIE_BUFS 4
+static struct {
+	uint32_t addr;
+	const uint32_t *px;
+	int w, h, iw, ih;
+	uint32_t seq, sent;
+	GLuint tex;
+	int tw, th;
+} movie_hd[MOVIE_BUFS];
+
+void ge_movie_hd(uint32_t addr, const uint32_t *px, int w, int h, int iw, int ih) {
+	int k = 0;
+	while (k < MOVIE_BUFS && movie_hd[k].addr != addr) k++;
+	if (!px) {
+		if (k < MOVIE_BUFS) movie_hd[k].px = NULL, movie_hd[k].addr = 0;
+		return;
+	}
+	if (k == MOVIE_BUFS) {  // a new buffer: a free place, else the one written longest ago
+		k = 0;
+		for (int i = 0; i < MOVIE_BUFS; i++)
+			if (!movie_hd[i].px || movie_hd[i].seq < movie_hd[k].seq) k = i;
+	}
+	static uint32_t seq;
+	movie_hd[k].addr = addr, movie_hd[k].px = px, movie_hd[k].w = w, movie_hd[k].h = h, movie_hd[k].iw = iw, movie_hd[k].ih = ih;
+	movie_hd[k].seq = ++seq;
+}
+
+static int movie_hd_at(uint32_t addr) {
+	for (int i = 0; i < MOVIE_BUFS; i++)
+		if (movie_hd[i].px && movie_hd[i].addr == addr) return i;
+	return -1;
+}
+
+static GLuint movie_hd_texture(int k) {
+	typeof(movie_hd[0]) *m = &movie_hd[k];
+	if (!m->tex) glGenTextures(1, &m->tex);
+	if (m->sent != m->seq) {
+		batch_flush();  // queued draws may use the texture about to be filled
+		glBindTexture(GL_TEXTURE_2D, m->tex);
+		if (m->tw != m->w || m->th != m->h) {
+			m->tw = m->w, m->th = m->h;
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m->tw, m->th, 0, GL_RGBA, GL_UNSIGNED_BYTE, m->px);
+		}
+		else glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m->tw, m->th, GL_RGBA, GL_UNSIGNED_BYTE, m->px);
+		gl_invalidate();
+		m->sent = m->seq;
+	}
+	return m->tex;
+}
+
 static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy) {
 	uint32_t addr = ((reg[0xA8] & 0x0F0000u) << 8) | (reg[0xA0] & 0xFFFFFFu);
+	if (!tex_sweeping) texture_sweep(addr);
 	int stride = (int)(reg[0xA8] & 0x7FF);
 	int w = 1 << (reg[0xB8] & 0xF), h = 1 << ((reg[0xB8] >> 8) & 0xF);
 	int fmt = (int)(reg[0xC3] & 0xF);
@@ -836,11 +1287,27 @@ static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy) {
 			}
 		}
 		if (f && f->last_draw) {
+			fbo_alpha_from_stencil(f);
+			fbo_debug_dump(f);
 			tex_from_fbo = true;
 			*uvsx = (float)*tw / (float)f->width;
 			*uvsy = (float)*th / (float)f->height;
 			return f->tex;
 		}
+	}
+
+	static int movie_log = -1;  // PANGYA_MOVIE_LOG=1 (tests): the textures read from a movie's frames
+	if (movie_log < 0) movie_log = getenv("PANGYA_MOVIE_LOG") != NULL;
+	if (movie_log && rt_psmf_frame_at(addr) && movie_log++ < 40)
+		rt_log("movie texture %08x fmt %d %dx%d stride %d swz %d (HD %d)", addr, fmt, w, h, stride, swz, movie_hd_at(addr & 0x0FFFFFFFu));
+	// a movie frame with an HD picture (fmt 8888, as psmf.c writes them)
+	int mk = fmt == 3 ? movie_hd_at(addr & 0x0FFFFFFFu) : -1;
+	if (mk >= 0) {
+		GLuint t = movie_hd_texture(mk);
+		*uvsx = (float)*tw / (float)movie_hd[mk].iw;  // the picture stands for iw x ih texels of the texture
+		*uvsy = (float)*th / (float)movie_hd[mk].ih;
+		tex_scale = (float)movie_hd[mk].w / (float)movie_hd[mk].iw;
+		return t;
 	}
 
 	static const int bpp_tab[16] = {16, 16, 16, 32, 4, 8, 16, 32, 4, 8, 8, 0, 0, 0, 0, 0};
@@ -865,17 +1332,17 @@ static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy) {
 	               ((uint64_t)stride << 40);
 	uint64_t clut_hash = 0;
 	if (fmt >= 4 && fmt <= 7) {
-		if (clut_dirty) {  // hashed again only after a CLUT load
-			clut_h64 = hash_bytes(clut, 64);
-			clut_h1k = hash_bytes(clut, 1024);
-			clut_dirty = false;
-		}
+		// hashed again only after a CLUT load, and only the part this format reads (a match loads
+		// some 300 CLUTs a frame, mostly of 16 colors)
+		static bool have64, have1k;
+		if (clut_dirty) have64 = have1k = false, clut_dirty = false;
+		if (fmt == 4 && !have64) clut_h64 = hash_bytes(clut, 64), have64 = true;
+		if (fmt != 4 && !have1k) clut_h1k = hash_bytes(clut, 1024), have1k = true;
 		clut_hash = (fmt == 4 ? clut_h64 : clut_h1k) * 31 + reg[0xC5];
 		key ^= clut_hash * 0x9E3779B97F4A7C15ull;
 	}
-	// Consecutive draws usually use the same texture.
-	static int last_slot = -1;
-	if (last_slot >= 0) {
+	// Consecutive draws usually use the same texture (last_slot).
+	if (last_slot >= 0 && !tex_sweeping) {
 		TexEntry *e = &texcache[last_slot];
 		if (e->tex && e->key == key && e->checked == frame_no) {
 			if (e->look) look_poll(e);
@@ -886,27 +1353,38 @@ static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy) {
 			return e->tex;
 		}
 	}
-	// Texture data is re-hashed at most once per frame.
+	// Texture data is re-hashed at most once per frame. Where each key was last found is kept (by
+	// a hash of the key) and looked at first: a match switches textures thousands of times a frame,
+	// and the whole table is gone through only for a texture not there.
+	enum { TEX_AT = 1024 };
+	static int16_t tex_at[TEX_AT];
+	uint32_t at_i = (uint32_t)((key * 0x9E3779B97F4A7C15ull) >> 54);
 	TexEntry *slot = NULL, *lru = &texcache[0];
-	for (int i = 0; i < MAX_TEX; i++) {
-		TexEntry *e = &texcache[i];
-		if (e->tex && e->key == key) {
-			if (e->checked == frame_no) {
-				if (e->look) look_poll(e);
-				if (e->pack1) pack_poll(e);
-				e->last_use = frame_no;
-				last_slot = i;
-				tex_scale = e->scale;
-				tex_mips = e->mips;
-				return e->tex;
+	if (texcache[tex_at[at_i]].tex && texcache[tex_at[at_i]].key == key) {
+		slot = &texcache[tex_at[at_i]];
+	}
+	else {
+		for (int i = 0; i < MAX_TEX; i++) {
+			TexEntry *e = &texcache[i];
+			if (e->tex && e->key == key) {
+				slot = e;
+				tex_at[at_i] = (int16_t)i;
+				break;
 			}
-			slot = e;
-			break;
+			if (e->last_use < lru->last_use) lru = e;
 		}
-		if (e->last_use < lru->last_use) lru = e;
+	}
+	if (slot && slot->checked == frame_no && !tex_sweeping) {  // (a sweep decodes again)
+		if (slot->look) look_poll(slot);
+		if (slot->pack1) pack_poll(slot);
+		slot->last_use = frame_no;
+		last_slot = (int)(slot - texcache);
+		tex_scale = slot->scale;
+		tex_mips = slot->mips;
+		return slot->tex;
 	}
 	uint64_t hash = TIMED(hash, hash_bytes(src, bytes));
-	if (slot && slot->hash == hash) {
+	if (slot && slot->hash == hash && !tex_sweeping) {
 		if (slot->look) look_poll(slot);
 		if (slot->pack1) pack_poll(slot);
 		slot->checked = slot->last_use = frame_no;
@@ -917,11 +1395,20 @@ static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy) {
 	}
 	// The same texture with new contents: how many frames in a row that happened (movie frames).
 	if (slot) slot->changes = frame_no - slot->changed_frame <= 2 ? (slot->changes < 255 ? slot->changes + 1 : 255) : 0;
-	else slot = lru, slot->changes = 0;
+	else slot = lru, slot->changes = 0, tex_at[at_i] = (int16_t)(slot - texcache);
 	slot->changed_frame = frame_no;
 	slot->pack1 = 0;
+	slot->cat_key = 0;
+	if (slot->up_px || slot->up_tex) {  // a replacement half way to the GPU: dropped with the old contents
+		free(slot->up_px);
+		slot->up_px = NULL;
+		if (slot->up_tex) glDeleteTextures(1, &slot->up_tex);
+		slot->up_tex = 0;
+	}
 	free(slot->ui_orig);
 	slot->ui_orig = NULL;
+	free(slot->orig);
+	slot->orig = NULL;
 	free(slot->look);
 	slot->look = NULL;
 	last_slot = (int)(slot - texcache);
@@ -988,6 +1475,8 @@ static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy) {
 		}
 	}
 	if (fmt >= 8) {  // PSP DXT blocks: indices first, then the two 565 colors (alpha after for DXT3/5)
+		// (DXT colors keep red in the high bits, as DXT does elsewhere: the other way round from the
+		// GE's 565 textures; read as those, a game's character select portraits came out blue)
 		int bs = fmt == 8 ? 8 : 16;
 		for (int by = 0; by < (h + 3) / 4; by++) {
 			for (int bx = 0; bx < (w + 3) / 4; bx++) {
@@ -1001,6 +1490,7 @@ static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy) {
 				uint32_t pal[4];
 				pal[0] = expand565(c1);
 				pal[1] = expand565(c2);
+				for (int k = 0; k < 2; k++) pal[k] = (pal[k] & 0xFF00FF00u) | (pal[k] & 0xFFu) << 16 | ((pal[k] >> 16) & 0xFFu);
 				for (int k = 0; k < 3; k++) {
 					uint32_t a = (pal[0] >> (k * 8)) & 0xFF, bb = (pal[1] >> (k * 8)) & 0xFF;
 					uint32_t m2, m3;
@@ -1045,10 +1535,12 @@ static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy) {
 	free(unswz);
 	prof.dec += rt_now_us() - t_dec;
 
-	if (tiles_on) {
+	texcat_add(slot, out, w, h, stride, fmt, addr);
+	if (GE_TILES_PACK_KEY && tiles_enabled()) {
 		int i = texpack_find(out, w, h);
 		slot->tile_key = i >= 0 ? texpack_entry_key(i, &slot->tile_iw, &slot->tile_ih) : 0;
 	}
+	rt_texture_decoded(out, w, h);  // mods: a texture changed as it comes (mods/title.c hides one)
 	// A replacement from the texture pack (the HD textures) takes the place of everything below.
 	static int pack_log = -1;
 	if (pack_log < 0) pack_log = getenv("PANGYA_TEXPACK_LOG") != NULL;
@@ -1103,7 +1595,8 @@ static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy) {
 		bool failed;
 		uint32_t *px = TIMED(read, texpack_load(pk, &pw, &ph, &iw, &ih, &failed));
 		slot->w = w, slot->h = h;
-		bool shown = px && pack_upload(slot, px, pw, ph, iw, ih, w, h);
+		bool shown = px && pack_upload(slot, px, pw, ph, iw, ih, w, h, out);
+		if (shown && slot->up_px) shown = false, slot->pack1 = pk + 1;  // big: by strips, the original meanwhile
 		free(px);
 		if (shown) {
 			if (pack_log) rt_log("texpack: replaced %016llx (%dx%d of %dx%d) at %dx", (unsigned long long)texpack_key(out, w, iw, ih), iw, ih, w, h, (int)slot->scale);
@@ -1115,7 +1608,12 @@ static GLuint texture_get_(int *tw, int *th, float *uvsx, float *uvsy) {
 			tex_mips = slot->mips;
 			return slot->tex;
 		}
-		if (!px && !failed) slot->pack1 = pk + 1;  // on its way (web): the original until then
+		if (!px && !failed) {  // on its way (web): the original until then
+			slot->pack1 = pk + 1;
+			free(slot->orig);
+			slot->orig = malloc(sizeof *out * (size_t)w * h);
+			if (slot->orig) memcpy(slot->orig, out, sizeof *out * (size_t)w * h);
+		}
 	}
 	static const char *texdump = (const char *)1;
 	if (texdump == (const char *)1) texdump = getenv("PANGYA_TEXDUMP");
@@ -1244,35 +1742,34 @@ static VFmt vfmt_decode(uint32_t vt) {
 	return f;
 }
 
-static float rd_comp(const uint8_t *p, int kind, int i, bool is_signed, bool normalize) {
+// n components of one kind (1: 8-bit, 2: 16-bit, 3: float) from p: the kind is looked at once per
+// attribute, not once per component.
+static inline void rd_n(const uint8_t *p, int kind, int n, bool is_signed, bool normalize, float *out) {
 	switch (kind) {
-	case 1: {
-		float v = is_signed ? (float)((const int8_t *)p)[i] : (float)p[i];
-		return normalize ? v / 128.f : v;
-	}
-	case 2: {
-		int16_t s;
-		uint16_t u;
-		memcpy(&s, p + i * 2, 2);
-		memcpy(&u, p + i * 2, 2);
-		float v = is_signed ? (float)s : (float)u;
-		return normalize ? v / 32768.f : v;
-	}
-	default: {
-		float f;
-		memcpy(&f, p + i * 4, 4);
-		return f;
-	}
+	case 1:
+		for (int i = 0; i < n; i++) {
+			float v = is_signed ? (float)((const int8_t *)p)[i] : (float)p[i];
+			out[i] = normalize ? v / 128.f : v;
+		}
+		break;
+	case 2:
+		for (int i = 0; i < n; i++) {
+			int16_t s;
+			uint16_t u;
+			memcpy(&s, p + i * 2, 2);
+			memcpy(&u, p + i * 2, 2);
+			float v = is_signed ? (float)s : (float)u;
+			out[i] = normalize ? v / 32768.f : v;
+		}
+		break;
+	default: memcpy(out, p, sizeof(float) * (size_t)n); break;
 	}
 }
 
 static void read_vertex(const VFmt *f, const uint8_t *p, RawVert *v) {
 	bool norm = !f->through;
-	for (int i = 0; i < f->nw && f->wt; i++) v->w[i] = rd_comp(p + f->off_w, f->wt, i, false, true);
-	if (f->tc) {
-		v->uv[0] = rd_comp(p + f->off_tc, f->tc, 0, false, norm);
-		v->uv[1] = rd_comp(p + f->off_tc, f->tc, 1, false, norm);
-	}
+	if (f->wt) rd_n(p + f->off_w, f->wt, f->nw, false, true, v->w);
+	if (f->tc) rd_n(p + f->off_tc, f->tc, 2, false, norm, v->uv);
 	v->has_col = f->col != 0;
 	if (f->col == 7) {
 		memcpy(v->col, p + f->off_col, 4);
@@ -1283,13 +1780,15 @@ static void read_vertex(const VFmt *f, const uint8_t *p, RawVert *v) {
 		uint32_t rgba = conv16(c, f->col - 4);
 		memcpy(v->col, &rgba, 4);
 	}
-	if (f->nrm) {
-		for (int i = 0; i < 3; i++) v->nrm[i] = rd_comp(p + f->off_nrm, f->nrm, i, true, norm);
-	}
+	else if (f->col) memset(v->col, 0, 4);  // (a color format the GE doesn't have)
+	if (f->nrm) rd_n(p + f->off_nrm, f->nrm, 3, true, norm, v->nrm);
 	int pk = f->pos ? f->pos : 3;
-	for (int i = 0; i < 3; i++) {
-		bool sgn = !(f->through && i == 2);  // through-mode z is unsigned
-		v->pos[i] = rd_comp(p + f->off_pos, pk, i, sgn, norm && pk != 3);
+	if (f->through && pk != 3) {  // through-mode z is unsigned
+		rd_n(p + f->off_pos, pk, 2, true, false, v->pos);
+		rd_n(p + f->off_pos + (pk == 1 ? 2 : 4), pk, 1, false, false, v->pos + 2);
+	}
+	else {
+		rd_n(p + f->off_pos, pk, 3, true, norm && pk != 3, v->pos);
 	}
 }
 
@@ -1306,159 +1805,459 @@ static void unpack_rgba(uint32_t rgb, uint32_t a, float *o) {
 	o[3] = (a & 0xFF) / 255.f;
 }
 
-static uint8_t to8(float v) { return (uint8_t)(v <= 0 ? 0 : v >= 1 ? 255 : (int)(v * 255.f + 0.5f)); }
+static inline uint8_t to8(float v) {
+	float t = v * 255.f + 0.5f;
+	t = t < 0 ? 0 : t;
+	t = t > 255.f ? 255.f : t;
+	return (uint8_t)(int)t;
+}
 
-static void light_vertex(const float *wpos, const float *wn, const float *vcol, float *c0, float *c1) {
-	uint32_t matupd = reg[0x53];
-	float mat_amb[4], mat_dif[4], mat_spe[4], emis[4], amb[4];
-	unpack_rgba(reg[0x55], reg[0x58], mat_amb);
-	unpack_rgba(reg[0x56], 0xFF, mat_dif);
-	unpack_rgba(reg[0x57], 0xFF, mat_spe);
-	unpack_rgba(reg[0x54], 0xFF, emis);
-	unpack_rgba(reg[0x5C], reg[0x5D], amb);
-	if (matupd & 1) memcpy(mat_amb, vcol, sizeof mat_amb);
-	if (matupd & 2) memcpy(mat_dif, vcol, sizeof mat_dif);
-	if (matupd & 4) memcpy(mat_spe, vcol, sizeof mat_spe);
-	float spec_coef = f24(reg[0x5B]);
-	float out[4] = {emis[0] + amb[0] * mat_amb[0], emis[1] + amb[1] * mat_amb[1], emis[2] + amb[2] * mat_amb[2],
-	                amb[3] * mat_amb[3]};
-	float spec[3] = {0, 0, 0};
-	float n[3] = {wn[0], wn[1], wn[2]};
-	if (reg[0x51] & 1) n[0] = -n[0], n[1] = -n[1], n[2] = -n[2];
-	float nl = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
-	if (nl > 0) n[0] /= nl, n[1] /= nl, n[2] /= nl;
+// Transforms one decoded vertex into a GL vertex.
+// What every vertex of a draw shares (xf_setup): the whole chain object -> world -> view ->
+// projection -> viewport as one matrix, the texture mapping, fog, the material color and the
+// lights. It is worked out again only when something it reads changed (ge_command counts those
+// changes in xf_gen, and those of view, projection and viewport in vp_gen): a match draws some
+// 7,000 times a frame, mostly with the same lights and camera. The world position and normal are
+// only made when lighting or the environment map uses them, and skinned normals only when
+// something reads them.
+static uint32_t xf_gen = 1, vp_gen = 1;
+
+typedef struct {
+	int kind, comp;      // directional, point, spot; ambient+diffuse, +specular, powered diffuse
+	float L[3];          // directional: the unit direction to the light; else its position
+	float ka, kb, kc;    // attenuation
+	float dir[3], cutoff, spot_exp;
+	float ac[4], dc[4], sc[4];  // ambient, diffuse, specular colors
+	float H[3];          // directional: the unit half vector (to the light and the eye, +z)
+	float dif[3], spe[3];  // directional: the diffuse and specular colors times the material's
+} Light;
+
+typedef struct {
+	float m[16];       // object position -> output x, y, z, w (row-major, rows of 4)
+	float fogz[4];     // object position -> view-space z (fog)
+	float c0[4];       // the material color (vertices without a color)
+	uint8_t c0b[4];    // the same as bytes
+	float su, sv, ou, ov;
+	float fog_end, fog_scale;
+	int mapmode, tg_src;
+	bool light, fog, world_needed, nrm_needed;
+	int tw, th;
+	float fbw, fbh;
+	// lighting
+	float mat_amb[4], mat_dif[4], mat_spe[4], emis[4], amb[4], spec_coef;
+	uint32_t matupd;
+	bool reverse, separate;
+	int nlights;
+	Light lt[4];
+	bool dir_only;     // every light directional: light_vertex's short way
+	int spec_int;      // the specular power when a whole number from 1 to 64 (multiplied out), else 0
+	float base[3];     // directional lights and the material's ambient: emissive + all the ambient light
+	float amb_sum[3];  // ... the ambient light, for the vertex's color as the material's ambient
+	// what it was made from
+	uint32_t gen, vgen;
+	float kfbw, kfbh;
+	double PV[16];     // viewport * projection * view
+} Xf;
+static Xf xf;
+
+static void xf_setup(const VFmt *f, float fbw, float fbh, int tw, int th) {
+	(void)f;
+	Xf *x = &xf;
+	x->tw = tw, x->th = th, x->fbw = fbw, x->fbh = fbh;
+	if (x->gen == xf_gen && x->kfbw == fbw && x->kfbh == fbh) return;
+	bool port_changed = x->vgen != vp_gen || x->kfbw != fbw || x->kfbh != fbh;
+	x->gen = xf_gen, x->vgen = vp_gen, x->kfbw = fbw, x->kfbh = fbh;
+	unpack_rgba(reg[0x55], reg[0x58], x->c0);
+	for (int k = 0; k < 4; k++) x->c0b[k] = to8(x->c0[k]);
+	// 4x4 row-major forms of the GE's matrices (world/view: 3 columns of 4 rows, translation last)
+#define MUL4(out, a, b) for (int r_ = 0; r_ < 4; r_++) for (int c_ = 0; c_ < 4; c_++) \
+		out[r_ * 4 + c_] = a[r_ * 4] * b[c_] + a[r_ * 4 + 1] * b[4 + c_] + a[r_ * 4 + 2] * b[8 + c_] + a[r_ * 4 + 3] * b[12 + c_]
+	if (port_changed) {
+		double V[16] = {0}, P[16], PV[16];
+		for (int r = 0; r < 3; r++)
+			for (int c = 0; c < 4; c++) V[r * 4 + c] = view[c * 3 + r];
+		V[15] = 1;
+		for (int r = 0; r < 4; r++)
+			for (int c = 0; c < 4; c++) P[r * 4 + c] = proj[c * 4 + r];
+		float vsx = f24(reg[0x42]), vsy = f24(reg[0x43]), vsz = f24(reg[0x44]);
+		float vcx = f24(reg[0x45]), vcy = f24(reg[0x46]), vcz = f24(reg[0x47]);
+		float offx = (float)(reg[0x4C] & 0xFFFF) / 16.f, offy = (float)(reg[0x4D] & 0xFFFF) / 16.f;
+		double port[16] = {2.0 * vsx / fbw, 0, 0, 2.0 * (vcx - offx) / fbw - 1.0,
+		                   0, 2.0 * vsy / fbh, 0, 2.0 * (vcy - offy) / fbh - 1.0,
+		                   0, 0, 2.0 * vsz / 65535.0, 2.0 * vcz / 65535.0 - 1.0,
+		                   0, 0, 0, 1};
+		MUL4(PV, P, V);
+		MUL4(x->PV, port, PV);
+	}
+	double W[16] = {0}, A[16];
+	for (int r = 0; r < 3; r++)
+		for (int c = 0; c < 4; c++) W[r * 4 + c] = world[c * 3 + r];
+	W[15] = 1;
+	MUL4(A, x->PV, W);
+#undef MUL4
+	for (int i = 0; i < 16; i++) x->m[i] = (float)A[i];
+	for (int c = 0; c < 4; c++)  // view-space z: the view's third row times the world matrix
+		x->fogz[c] = (float)((double)view[2] * W[c] + (double)view[5] * W[4 + c] + (double)view[8] * W[8 + c] +
+		                     (double)view[11] * W[12 + c]);
+	x->mapmode = reg[0xC0] & 3;
+	x->tg_src = (reg[0xC0] >> 8) & 3;
+	x->su = f24(reg[0x48]), x->sv = f24(reg[0x49]), x->ou = f24(reg[0x4A]), x->ov = f24(reg[0x4B]);
+	x->light = reg[0x17] & 1;
+	x->fog = reg[0x1F] & 1;
+	x->fog_end = f24(reg[0xCD]), x->fog_scale = f24(reg[0xCE]);
+	x->world_needed = x->light || x->mapmode == 2;
+	x->nrm_needed = x->world_needed;
+	if (!x->light) return;
+	x->matupd = reg[0x53];
+	unpack_rgba(reg[0x55], reg[0x58], x->mat_amb);
+	unpack_rgba(reg[0x56], 0xFF, x->mat_dif);
+	unpack_rgba(reg[0x57], 0xFF, x->mat_spe);
+	unpack_rgba(reg[0x54], 0xFF, x->emis);
+	unpack_rgba(reg[0x5C], reg[0x5D], x->amb);
+	x->spec_coef = f24(reg[0x5B]);
+	x->reverse = reg[0x51] & 1;
+	x->separate = reg[0x5E] & 1;
+	x->nlights = 0;
 	for (int i = 0; i < 4; i++) {
 		if (!(reg[0x18 + i] & 1)) continue;
+		Light *l = &x->lt[x->nlights++];
 		uint32_t lt = reg[0x5F + i];
-		int comp = lt & 3, kind = (lt >> 8) & 3;
+		l->comp = lt & 3, l->kind = (lt >> 8) & 3;
 		float lp[3] = {f24(reg[0x63 + i * 3]), f24(reg[0x64 + i * 3]), f24(reg[0x65 + i * 3])};
-		float L[3], att = 1.f;
-		if (kind == 0) {
-			memcpy(L, lp, sizeof L);
+		memcpy(l->L, lp, sizeof l->L);
+		if (l->kind == 0) {
+			float ll = sqrtf(lp[0] * lp[0] + lp[1] * lp[1] + lp[2] * lp[2]);
+			if (ll > 0) l->L[0] /= ll, l->L[1] /= ll, l->L[2] /= ll;
 		}
-		else {
-			L[0] = lp[0] - wpos[0], L[1] = lp[1] - wpos[1], L[2] = lp[2] - wpos[2];
-			float d = sqrtf(L[0] * L[0] + L[1] * L[1] + L[2] * L[2]);
-			float ka = f24(reg[0x7B + i * 3]), kb = f24(reg[0x7C + i * 3]), kc = f24(reg[0x7D + i * 3]);
-			float den = ka + kb * d + kc * d * d;
-			att = den > 0 ? 1.f / den : 1.f;
-			if (att > 1) att = 1;
-		}
-		float ll = sqrtf(L[0] * L[0] + L[1] * L[1] + L[2] * L[2]);
-		if (ll > 0) L[0] /= ll, L[1] /= ll, L[2] /= ll;
-		if (kind == 2) {  // spot
+		l->ka = f24(reg[0x7B + i * 3]), l->kb = f24(reg[0x7C + i * 3]), l->kc = f24(reg[0x7D + i * 3]);
+		if (l->kind == 2) {
 			float dir[3] = {f24(reg[0x6F + i * 3]), f24(reg[0x70 + i * 3]), f24(reg[0x71 + i * 3])};
 			float dl = sqrtf(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
 			if (dl > 0) dir[0] /= dl, dir[1] /= dl, dir[2] /= dl;
-			float sd = -(L[0] * dir[0] + L[1] * dir[1] + L[2] * dir[2]);
-			float cutoff = f24(reg[0x8B + i]);
-			att = sd >= cutoff ? att * powf(sd > 0 ? sd : 0, f24(reg[0x87 + i])) : 0;
+			memcpy(l->dir, dir, sizeof dir);
+			l->cutoff = f24(reg[0x8B + i]);
+			l->spot_exp = f24(reg[0x87 + i]);
 		}
-		float lac[4], ldc[4], lsc[4];
-		unpack_rgba(reg[0x8F + i * 3], 0, lac);
-		unpack_rgba(reg[0x90 + i * 3], 0, ldc);
-		unpack_rgba(reg[0x91 + i * 3], 0, lsc);
+		unpack_rgba(reg[0x8F + i * 3], 0, l->ac);
+		unpack_rgba(reg[0x90 + i * 3], 0, l->dc);
+		unpack_rgba(reg[0x91 + i * 3], 0, l->sc);
+	}
+	// The short way (light_vertex): directional lights only, the same for every vertex but the
+	// normal: the ambient parts summed, the colors multiplied by the material's, the half vectors.
+	x->dir_only = true;
+	float sc = x->spec_coef;
+	x->spec_int = sc >= 1 && sc <= 64 && sc == (float)(int)sc ? (int)sc : 0;
+	for (int k = 0; k < 3; k++) x->amb_sum[k] = x->amb[k];
+	for (int i = 0; i < x->nlights; i++) {
+		Light *l = &x->lt[i];
+		if (l->kind != 0) x->dir_only = false;
+		float H[3] = {l->L[0], l->L[1], l->L[2] + 1.f};
+		float hl = sqrtf(H[0] * H[0] + H[1] * H[1] + H[2] * H[2]);
+		for (int k = 0; k < 3; k++) {
+			l->H[k] = hl > 0 ? H[k] / hl : 0;
+			l->dif[k] = l->dc[k] * x->mat_dif[k];
+			l->spe[k] = l->sc[k] * x->mat_spe[k];
+			x->amb_sum[k] += l->ac[k];
+		}
+	}
+	for (int k = 0; k < 3; k++) x->base[k] = x->emis[k] + x->amb_sum[k] * x->mat_amb[k];
+}
+
+// s to the specular power (powf is slow in the browser; the game's powers are whole numbers)
+static inline float spec_pow(const Xf *x, float s) {
+	if (!x->spec_int) return powf(s, x->spec_coef);
+	float r = 1.f, b = s;
+	for (int e = x->spec_int; e; e >>= 1) {
+		if (e & 1) r *= b;
+		b *= b;
+	}
+	return r;
+}
+
+// Directional lights only (what the game uses): per light one dot product with the normal for the
+// diffuse light and, for specular lights, one with the light's half vector.
+static void light_vertex_dir(bool has_nrm, const float *wn, const float *vcol, float *c0, float *c1) {
+	const Xf *x = &xf;
+	float out[3], spec[3] = {0, 0, 0};
+	float alpha = x->amb[3] * (x->matupd & 1 ? vcol[3] : x->mat_amb[3]);
+	if (x->matupd & 1) {
+		for (int k = 0; k < 3; k++) out[k] = x->emis[k] + x->amb_sum[k] * vcol[k];
+	}
+	else {
+		memcpy(out, x->base, sizeof out);
+	}
+	if (has_nrm && x->nlights) {
+		float n[3] = {wn[0], wn[1], wn[2]};
+		float nl = n[0] * n[0] + n[1] * n[1] + n[2] * n[2];
+		if (nl > 0) {
+			float inv = (x->reverse ? -1.f : 1.f) / sqrtf(nl);
+			n[0] *= inv, n[1] *= inv, n[2] *= inv;
+			for (int i = 0; i < x->nlights; i++) {
+				const Light *l = &x->lt[i];
+				float d = n[0] * l->L[0] + n[1] * l->L[1] + n[2] * l->L[2];
+				if (d <= 0) {
+					if (l->comp != 2 || x->spec_coef != 0) continue;
+					d = 0;  // (0 to the power 0: 1)
+				}
+				if (l->comp == 2) d = spec_pow(x, d);
+				if (x->matupd & 2) {
+					for (int k = 0; k < 3; k++) out[k] += d * l->dc[k] * vcol[k];
+				}
+				else {
+					for (int k = 0; k < 3; k++) out[k] += d * l->dif[k];
+				}
+				if (l->comp == 1) {
+					float s = n[0] * l->H[0] + n[1] * l->H[1] + n[2] * l->H[2];
+					if (s <= 0) continue;
+					s = spec_pow(x, s);
+					if (x->matupd & 4) {
+						for (int k = 0; k < 3; k++) spec[k] += s * l->sc[k] * vcol[k];
+					}
+					else {
+						for (int k = 0; k < 3; k++) spec[k] += s * l->spe[k];
+					}
+				}
+			}
+		}
+	}
+	for (int k = 0; k < 3; k++) {
+		c0[k] = out[k] + (x->separate ? 0 : spec[k]);
+		c1[k] = x->separate ? spec[k] : 0;
+	}
+	c0[3] = alpha;
+	c1[3] = 0;
+}
+
+static void light_vertex(const float *wpos, const float *wn, const float *vcol, float *c0, float *c1) {
+	const Xf *x = &xf;
+	// vcol may be c0 itself: c0 is written only at the end
+	const float *mat_amb = x->matupd & 1 ? vcol : x->mat_amb;
+	const float *mat_dif = x->matupd & 2 ? vcol : x->mat_dif;
+	const float *mat_spe = x->matupd & 4 ? vcol : x->mat_spe;
+	float out[4] = {x->emis[0] + x->amb[0] * mat_amb[0], x->emis[1] + x->amb[1] * mat_amb[1],
+	                x->emis[2] + x->amb[2] * mat_amb[2], x->amb[3] * mat_amb[3]};
+	float spec[3] = {0, 0, 0};
+	float n[3] = {wn[0], wn[1], wn[2]};
+	if (x->reverse) n[0] = -n[0], n[1] = -n[1], n[2] = -n[2];
+	float nl = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+	if (nl > 0) n[0] /= nl, n[1] /= nl, n[2] /= nl;
+	for (int i = 0; i < x->nlights; i++) {
+		const Light *l = &x->lt[i];
+		float L[3], att = 1.f;
+		if (l->kind == 0) {
+			memcpy(L, l->L, sizeof L);
+		}
+		else {
+			L[0] = l->L[0] - wpos[0], L[1] = l->L[1] - wpos[1], L[2] = l->L[2] - wpos[2];
+			float d = sqrtf(L[0] * L[0] + L[1] * L[1] + L[2] * L[2]);
+			float den = l->ka + l->kb * d + l->kc * d * d;
+			att = den > 0 ? 1.f / den : 1.f;
+			if (att > 1) att = 1;
+			if (d > 0) L[0] /= d, L[1] /= d, L[2] /= d;
+			if (l->kind == 2) {  // spot
+				float sd = -(L[0] * l->dir[0] + L[1] * l->dir[1] + L[2] * l->dir[2]);
+				att = sd >= l->cutoff ? att * powf(sd > 0 ? sd : 0, l->spot_exp) : 0;
+			}
+		}
 		float d = n[0] * L[0] + n[1] * L[1] + n[2] * L[2];
 		if (d < 0) d = 0;
-		if (comp == 2) d = powf(d, spec_coef);
-		for (int k = 0; k < 3; k++) out[k] += att * (lac[k] * mat_amb[k] + d * ldc[k] * mat_dif[k]);
-		if (comp == 1 && d > 0) {
+		if (l->comp == 2) d = powf(d, x->spec_coef);
+		for (int k = 0; k < 3; k++) out[k] += att * (l->ac[k] * mat_amb[k] + d * l->dc[k] * mat_dif[k]);
+		if (l->comp == 1 && d > 0) {
 			float H[3] = {L[0], L[1], L[2] + 1.f};
 			float hl = sqrtf(H[0] * H[0] + H[1] * H[1] + H[2] * H[2]);
 			float s = hl > 0 ? (n[0] * H[0] + n[1] * H[1] + n[2] * H[2]) / hl : 0;
-			s = s > 0 ? powf(s, spec_coef) : 0;
-			for (int k = 0; k < 3; k++) spec[k] += att * s * lsc[k] * mat_spe[k];
+			s = s > 0 ? powf(s, x->spec_coef) : 0;
+			for (int k = 0; k < 3; k++) spec[k] += att * s * l->sc[k] * mat_spe[k];
 		}
 	}
-	bool separate = reg[0x5E] & 1;
 	for (int k = 0; k < 3; k++) {
-		c0[k] = out[k] + (separate ? 0 : spec[k]);
-		c1[k] = separate ? spec[k] : 0;
+		c0[k] = out[k] + (x->separate ? 0 : spec[k]);
+		c1[k] = x->separate ? spec[k] : 0;
 	}
 	c0[3] = out[3];  // alpha: global ambient alpha * material ambient alpha
 	c1[3] = 0;
 }
 
-// Transforms one decoded vertex into a GL vertex.
-static void transform(const VFmt *f, const RawVert *rv, GVert *o, float fbw, float fbh, int tw, int th) {
-	o->box[0] = o->box[1] = -1e9f, o->box[2] = o->box[3] = 1e9f;  // no sprite rectangle
-	float c0[4], c1[4] = {0, 0, 0, 0};
+static void transform(const VFmt *f, const RawVert *rv, GVert *o) {
+	const Xf *x = &xf;
+	if (f->through) {
+		o->x = rv->pos[0] / x->fbw * 2.f - 1.f;
+		o->y = rv->pos[1] / x->fbh * 2.f - 1.f;
+		o->z = rv->pos[2] / 65535.f * 2.f - 1.f;
+		o->w = 1.f;
+		o->u = x->tw ? rv->uv[0] / (float)x->tw : 0;
+		o->v = x->th ? rv->uv[1] / (float)x->th : 0;
+		memcpy(o->c0, rv->has_col ? rv->col : x->c0b, 4);
+		o->c1[0] = o->c1[1] = o->c1[2] = 0, o->c1[3] = 255;
+		o->fog = 1.f;  // no fog
+		return;
+	}
+	float p[3] = {rv->pos[0], rv->pos[1], rv->pos[2]}, n[3] = {rv->nrm[0], rv->nrm[1], rv->nrm[2]};
+	if (f->wt) {  // skinning
+		float sp[3] = {0, 0, 0}, sn[3] = {0, 0, 0};
+		for (int b = 0; b < f->nw; b++) {
+			float wb = rv->w[b], tp[3];
+			if (wb == 0.f) continue;
+			mul43(bone + b * 12, p, 1.f, tp);
+			for (int k = 0; k < 3; k++) sp[k] += tp[k] * wb;
+			if (x->nrm_needed) {
+				float tn[3];
+				mul43(bone + b * 12, n, 0.f, tn);
+				for (int k = 0; k < 3; k++) sn[k] += tn[k] * wb;
+			}
+		}
+		memcpy(p, sp, sizeof p);
+		memcpy(n, sn, sizeof n);
+	}
+	const float *m = x->m;
+	o->x = m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3];
+	o->y = m[4] * p[0] + m[5] * p[1] + m[6] * p[2] + m[7];
+	o->z = m[8] * p[0] + m[9] * p[1] + m[10] * p[2] + m[11];
+	o->w = m[12] * p[0] + m[13] * p[1] + m[14] * p[2] + m[15];
+	float wp[3] = {0, 0, 0}, wn[3] = {0, 0, 0};
+	if (x->world_needed) {
+		if (!x->light || !x->dir_only) mul43(world, p, 1.f, wp);  // (a light's distance)
+		mul43(world, n, 0.f, wn);
+	}
+	// Texture coordinates
+	if (x->mapmode == 0) {
+		o->u = rv->uv[0] * x->su + x->ou;
+		o->v = rv->uv[1] * x->sv + x->ov;
+	}
+	else if (x->mapmode == 1) {
+		float in[3];
+		if (x->tg_src == 0) memcpy(in, rv->pos, sizeof in);
+		else if (x->tg_src == 1) in[0] = rv->uv[0], in[1] = rv->uv[1], in[2] = 0;
+		else memcpy(in, rv->nrm, sizeof in);
+		float t[3];
+		mul43(tgen, in, 1.f, t);
+		o->u = t[2] != 0 ? t[0] / t[2] : t[0];
+		o->v = t[2] != 0 ? t[1] / t[2] : t[1];
+	}
+	else {  // environment map from the normal
+		float nn = sqrtf(wn[0] * wn[0] + wn[1] * wn[1] + wn[2] * wn[2]);
+		o->u = nn > 0 ? (wn[0] / nn + 1.f) * 0.5f : 0.5f;
+		o->v = nn > 0 ? (wn[1] / nn + 1.f) * 0.5f : 0.5f;
+	}
+	o->fog = 1.f;  // no fog
+	if (x->fog) {
+		float vz = x->fogz[0] * p[0] + x->fogz[1] * p[1] + x->fogz[2] * p[2] + x->fogz[3];
+		float fd = (vz + x->fog_end) * x->fog_scale;
+		o->fog = fd == fd ? fmaxf(-1e6f, fminf(fd, 1e6f)) : 1.f;  // not clamped to 0..1 here (see GVert)
+	}
+	if (!x->light) {  // the vertex's own color or the material's, as they are
+		memcpy(o->c0, rv->has_col ? rv->col : x->c0b, 4);
+		o->c1[0] = o->c1[1] = o->c1[2] = 0, o->c1[3] = 255;
+		return;
+	}
+	float c0[4], c1[4];
 	if (rv->has_col) {
 		for (int k = 0; k < 4; k++) c0[k] = rv->col[k] / 255.f;
 	}
 	else {
-		unpack_rgba(reg[0x55], reg[0x58], c0);
+		memcpy(c0, x->c0, sizeof c0);
 	}
-	if (f->through) {
-		float ox = 0, oy = 0;
-		o->x = (rv->pos[0] - ox) / fbw * 2.f - 1.f;
-		o->y = (rv->pos[1] - oy) / fbh * 2.f - 1.f;
-		o->z = rv->pos[2] / 65535.f * 2.f - 1.f;
-		o->w = 1.f;
-		o->u = tw ? rv->uv[0] / (float)tw : 0;
-		o->v = th ? rv->uv[1] / (float)th : 0;
-		o->fog = 1.f;
+	if (x->dir_only) light_vertex_dir(f->nrm != 0, wn, c0, c0, c1);
+	else light_vertex(wp, wn, c0, c0, c1);
+	for (int k = 0; k < 4; k++) o->c0[k] = to8(c0[k]);
+	if (x->separate) {
+		for (int k = 0; k < 3; k++) o->c1[k] = to8(c1[k]);
 	}
 	else {
-		float p[3] = {rv->pos[0], rv->pos[1], rv->pos[2]}, n[3] = {rv->nrm[0], rv->nrm[1], rv->nrm[2]};
-		if (f->wt) {  // skinning
-			float sp[3] = {0, 0, 0}, sn[3] = {0, 0, 0};
-			for (int b = 0; b < f->nw; b++) {
-				float tp[3], tn[3];
-				mul43(bone + b * 12, p, 1.f, tp);
-				mul43(bone + b * 12, n, 0.f, tn);
-				for (int k = 0; k < 3; k++) sp[k] += tp[k] * rv->w[b], sn[k] += tn[k] * rv->w[b];
+		o->c1[0] = o->c1[1] = o->c1[2] = 0;  // the specular light is in c0
+	}
+	o->c1[3] = 255;
+}
+
+// BOUNDINGBOX (as PPSSPP has it, DrawEngineCommon::TestBoundingBox): the vertices (skinned, then
+// by the world matrix) are tested against the planes of the screen area the GE draws to (offset,
+// scissor and region; near and far only with depth clamping); out of sight when all of them are
+// outside one plane. Of more than 0x100 vertices the GE looks at one run of 0x100 only. a game
+// tests ~440 boxes a frame and skips (BJUMP) what is out of sight; drawn anyway, things the game
+// had stopped updating came out as polygons from nowhere.
+bool ge_bounding_box(uint32_t count) {
+	static int off = -1;  // PANGYA_NO_BBOX=1: as before (no test, the addresses left alone), to compare
+	if (off < 0) off = getenv("PANGYA_NO_BBOX") != NULL;
+	if (off) return true;
+	VFmt f = vfmt_decode(reg[0x12]);
+	int isz = f.idx == 1 ? 1 : f.idx == 2 ? 2 : 0;
+	uint32_t vaddr = vertex_addr, iaddr = index_addr;
+	if (isz) index_addr += count * (uint32_t)isz;  // the addresses move on, as after a drawing
+	else vertex_addr += count * (uint32_t)f.size;
+	if (!count) return false;
+	if (f.through) return true;
+	uint32_t first = 0, n = count;
+	if (count > 0x200) first = count - 0x200, n = 0x100;
+	else if (count > 0x100) n = count - 0x100;
+	if (n > 1024 || !rt_valid(vaddr, 1) || (isz && !rt_valid(iaddr, count * (uint32_t)isz))) return true;
+	// the planes: projection * view, then the screen area as -1..1
+	double V[16] = {0}, P[16], PV[16];
+	for (int r = 0; r < 3; r++)
+		for (int c = 0; c < 4; c++) V[r * 4 + c] = view[c * 3 + r];
+	V[15] = 1;
+	for (int r = 0; r < 4; r++)
+		for (int c = 0; c < 4; c++) P[r * 4 + c] = proj[c * 4 + r];
+	for (int r = 0; r < 4; r++)
+		for (int c = 0; c < 4; c++) PV[r * 4 + c] = P[r * 4] * V[c] + P[r * 4 + 1] * V[4 + c] + P[r * 4 + 2] * V[8 + c] + P[r * 4 + 3] * V[12 + c];
+	float offx = (float)(reg[0x4C] & 0xFFFF) / 16.f, offy = (float)(reg[0x4D] & 0xFFFF) / 16.f;
+	int sx1 = (int)(reg[0xD4] & 0x3FF), sy1 = (int)((reg[0xD4] >> 10) & 0x3FF);
+	int sx2 = (int)(reg[0xD5] & 0x3FF), sy2 = (int)((reg[0xD5] >> 10) & 0x3FF);
+	int rx1 = (int)(reg[0x15] & 0x3FF) - 0x100, ry1 = (int)((reg[0x15] >> 10) & 0x3FF) - 0x100;
+	int rx2 = (int)(reg[0x16] & 0x3FF), ry2 = (int)((reg[0x16] >> 10) & 0x3FF);
+	float minx = offx + (float)(rx1 > sx1 ? rx1 : sx1) - 1.f, miny = offy + (float)(ry1 > sy1 ? ry1 : sy1) - 1.f;
+	float maxx = offx + (float)(rx2 < sx2 ? rx2 : sx2) + 1.f, maxy = offy + (float)(ry2 < sy2 ? ry2 : sy2) + 1.f;
+	float vsx = f24(reg[0x42]), vsy = f24(reg[0x43]), vcx = f24(reg[0x45]), vcy = f24(reg[0x46]);
+	if (vsx == 0 || vsy == 0) return true;
+	float minvx = (minx - vcx) / vsx, maxvx = (maxx - vcx) / vsx, minvy = (miny - vcy) / vsy, maxvy = (maxy - vcy) / vsy;
+	if (maxvx == minvx || maxvy == minvy) return true;
+	float ix = 1.f / (maxvx - minvx), iy = 1.f / (maxvy - minvy);
+	int planes = (reg[0x1C] & 1) ? 6 : 4;  // near and far only with depth clamping
+	bool edge[4] = {maxx >= 4096.f, minx < 1.f, miny < 1.f, maxy >= 4096.f};
+	int inside[6] = {0};
+	float mw[8];
+	for (int m = 0; m < 8; m++) mw[m] = f24(reg[0x2C + m]);
+	for (uint32_t k = 0; k < n; k++) {
+		uint32_t i = first + k, vi = i;
+		if (isz == 1) vi = M8(iaddr + i);
+		else if (isz == 2) vi = M16(iaddr + i * 2);
+		if (!rt_valid(vaddr + vi * (uint32_t)f.size * (uint32_t)f.morphs, (uint32_t)f.size * (uint32_t)f.morphs)) return true;
+		RawVert rv = {0};
+		if (f.morphs == 1) {
+			read_vertex(&f, MP(vaddr + vi * (uint32_t)f.size), &rv);
+		}
+		else {
+			for (int m = 0; m < f.morphs; m++) {
+				RawVert t = {0};
+				read_vertex(&f, MP(vaddr + (vi * (uint32_t)f.morphs + (uint32_t)m) * (uint32_t)f.size), &t);
+				for (int q = 0; q < 3; q++) rv.pos[q] += t.pos[q] * mw[m];
+				for (int q = 0; q < 8; q++) rv.w[q] += t.w[q] * mw[m];
+			}
+		}
+		float p[3] = {rv.pos[0], rv.pos[1], rv.pos[2]};
+		if (f.wt) {  // skinning
+			float sp[3] = {0, 0, 0};
+			for (int b = 0; b < f.nw; b++) {
+				float tp[3];
+				if (rv.w[b] == 0.f) continue;
+				mul43(bone + b * 12, rv.pos, 1.f, tp);
+				for (int q = 0; q < 3; q++) sp[q] += tp[q] * rv.w[b];
 			}
 			memcpy(p, sp, sizeof p);
-			memcpy(n, sn, sizeof n);
 		}
-		float wp[3], wn[3], vp[3];
+		float wp[3];
 		mul43(world, p, 1.f, wp);
-		mul43(world, n, 0.f, wn);
-		mul43(view, wp, 1.f, vp);
-		float cx = vp[0] * proj[0] + vp[1] * proj[4] + vp[2] * proj[8] + proj[12];
-		float cy = vp[0] * proj[1] + vp[1] * proj[5] + vp[2] * proj[9] + proj[13];
-		float cz = vp[0] * proj[2] + vp[1] * proj[6] + vp[2] * proj[10] + proj[14];
-		float cw = vp[0] * proj[3] + vp[1] * proj[7] + vp[2] * proj[11] + proj[15];
-		float vsx = f24(reg[0x42]), vsy = f24(reg[0x43]), vsz = f24(reg[0x44]);
-		float vcx = f24(reg[0x45]), vcy = f24(reg[0x46]), vcz = f24(reg[0x47]);
-		float offx = (float)(reg[0x4C] & 0xFFFF) / 16.f, offy = (float)(reg[0x4D] & 0xFFFF) / 16.f;
-		o->x = cx * (2.f * vsx / fbw) + cw * (2.f * (vcx - offx) / fbw - 1.f);
-		o->y = cy * (2.f * vsy / fbh) + cw * (2.f * (vcy - offy) / fbh - 1.f);
-		o->z = cz * (2.f * vsz / 65535.f) + cw * (2.f * vcz / 65535.f - 1.f);
-		o->w = cw;
-		// Texture coordinates
-		int mapmode = reg[0xC0] & 3;
-		float su = f24(reg[0x48]), sv = f24(reg[0x49]), ou = f24(reg[0x4A]), ov = f24(reg[0x4B]);
-		if (mapmode == 0) {
-			o->u = rv->uv[0] * su + ou;
-			o->v = rv->uv[1] * sv + ov;
-		}
-		else if (mapmode == 1) {
-			int src = (reg[0xC0] >> 8) & 3;
-			float in[3];
-			if (src == 0) memcpy(in, rv->pos, sizeof in);
-			else if (src == 1) in[0] = rv->uv[0], in[1] = rv->uv[1], in[2] = 0;
-			else memcpy(in, rv->nrm, sizeof in);
-			float t[3];
-			mul43(tgen, in, 1.f, t);
-			o->u = t[2] != 0 ? t[0] / t[2] : t[0];
-			o->v = t[2] != 0 ? t[1] / t[2] : t[1];
-		}
-		else {  // environment map from the normal
-			float nn = sqrtf(wn[0] * wn[0] + wn[1] * wn[1] + wn[2] * wn[2]);
-			o->u = nn > 0 ? (wn[0] / nn + 1.f) * 0.5f : 0.5f;
-			o->v = nn > 0 ? (wn[1] / nn + 1.f) * 0.5f : 0.5f;
-		}
-		if (reg[0x17] & 1) {
-			light_vertex(wp, wn, c0, c0, c1);
-		}
-		o->fog = (reg[0x1F] & 1) ? (vp[2] + f24(reg[0xCD])) * f24(reg[0xCE]) : 1.f;
+		double c4[4];
+		for (int r = 0; r < 4; r++) c4[r] = PV[r * 4] * wp[0] + PV[r * 4 + 1] * wp[1] + PV[r * 4 + 2] * wp[2] + PV[r * 4 + 3];
+		float x = (float)c4[0], y = (float)c4[1], z = (float)c4[2], w = (float)c4[3];
+		float xs = (2.f * x - (maxvx + minvx) * w) * ix, ys = (2.f * y - (maxvy + minvy) * w) * iy;
+		float val[6] = {w - xs, w + xs, w + ys, w - ys, w + z, w - z};
+		for (int pl = 0; pl < planes; pl++)
+			if (val[pl] > -FLT_EPSILON) inside[pl]++;
 	}
-	for (int k = 0; k < 4; k++) {
-		o->c0[k] = to8(c0[k]);
-		o->c1[k] = to8(c1[k]);
-	}
+	for (int pl = 0; pl < planes; pl++)
+		if (!inside[pl] && !(pl < 4 && edge[pl])) return false;
+	return true;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1496,15 +2295,54 @@ typedef struct {
 	float bcolor[3];
 	int32_t clear_mode, tex_enable, tfunc, tfunc_rgba, color_double, alpha_test, at_func, fog_enable, blend_double;
 	float at_ref, uvs[2], env[3], fog[3];
+	int32_t at_mask;
 	int32_t ct_func, ct_ref[3], ct_mask[3];  // color test (ct_func 1 = always / off)
 	int32_t xbr;  // 2D upscaling filter: 0 off, else 4 * (1 xBR | 2 bicubic) + clamp s + 2 * clamp t
+	// Stencil: the PSP keeps it in the framebuffer's alpha; here it is the GL stencil buffer (as in
+	// PPSSPP), driven by the PSP's test and ops. Clears set it from the clear color's alpha.
+	int32_t st_on, st_ref, st_mask, st_wmask;
+	GLenum st_func, st_ops[3];  // stencil fail, depth fail, depth pass
+	int32_t sprite;  // the vertices are SVerts (all_s)
 } RenderState;
 
 static RenderState glc;  // what the GL currently has
 static bool glc_valid;
 
+// The texture bound on unit 0 (TEX_UNKNOWN: something else bound one since).
+#define TEX_UNKNOWN 0xFFFFFFFFu
+static GLuint unit0 = TEX_UNKNOWN;
+
 // Something else (presentation, transfers) touched the GL state: re-apply everything next time.
-static void gl_invalidate(void) { glc_valid = false; }
+static void gl_invalidate(void) {
+	glc_valid = false;
+	unit0 = TEX_UNKNOWN;
+}
+
+// An untextured draw still has a texture bound on unit 0, and the shader's sampler counts: WebGL2
+// refuses the whole draw when that texture is the framebuffer being drawn into ("feedback loop")
+// though the shader never samples it (desktop GL draws it). A new framebuffer's texture stays
+// bound after it is made, and a draw that sampled one leaves it there: such draws were lost in
+// the browser (the glow effect's buffer kept a stale glow: an aura stuck around the player, whom
+// the camera keeps at the centre). Untextured draws get a blank 1x1 texture then.
+// PANGYA_GE_FEEDBACK=1 logs those draws.
+static GLuint untextured_unit0(const RenderState *s) {
+	if (unit0 != TEX_UNKNOWN && unit0 != s->fbo->tex) return unit0;
+	static GLuint blank;
+	if (!blank) {
+		static const uint8_t px[4] = {0, 0, 0, 0};
+		glGenTextures(1, &blank);
+		glBindTexture(GL_TEXTURE_2D, blank);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, px);
+	}
+	static int log = -1, logged;
+	if (log < 0) log = getenv("PANGYA_GE_FEEDBACK") != NULL;
+	if (log && unit0 == s->fbo->tex && logged < 200) {
+		logged++;
+		rt_log("GE: untextured draw into %08x (%dx%d)%s with its own texture bound", s->fbo->addr, s->fbo->width,
+		       s->fbo->height, s->clear_mode ? ", a clear," : "");
+	}
+	return blank;
+}
 
 static void gl_apply(const RenderState *s) {
 #define CH(f) (!glc_valid || memcmp(&glc.f, &s->f, sizeof s->f))
@@ -1528,6 +2366,11 @@ static void gl_apply(const RenderState *s) {
 	if (CH(depth_test)) (s->depth_test ? glEnable : glDisable)(GL_DEPTH_TEST);
 	if (s->depth_test && CH(depth_func)) glDepthFunc(s->depth_func);
 	if (CH(depth_mask)) glDepthMask(s->depth_mask);
+	if (CH(st_on)) (s->st_on ? glEnable : glDisable)(GL_STENCIL_TEST);
+	if (s->st_on) s->fbo->stencil_used = true;
+	if (s->st_on && (CH(st_func) || CH(st_ref) || CH(st_mask))) glStencilFunc(s->st_func, s->st_ref, (GLuint)s->st_mask);
+	if (s->st_on && CH(st_ops)) glStencilOp(s->st_ops[0], s->st_ops[1], s->st_ops[2]);
+	if (CH(st_wmask)) glStencilMask((GLuint)s->st_wmask);
 	if (CH(cull)) (s->cull ? glEnable : glDisable)(GL_CULL_FACE);
 	if (s->cull && CH(cull_face)) glCullFace(s->cull_face);
 	if (CH(clear_mode)) glUniform1i(u_clearMode, s->clear_mode);
@@ -1538,6 +2381,7 @@ static void gl_apply(const RenderState *s) {
 	if (CH(alpha_test)) glUniform1i(u_alphaTest, s->alpha_test);
 	if (CH(at_func)) glUniform1i(u_atFunc, s->at_func);
 	if (CH(at_ref)) glUniform1f(u_atRef, s->at_ref);
+	if (CH(at_mask)) glUniform1i(u_atMask, s->at_mask);
 	if (CH(fog_enable)) glUniform1i(u_fogEnable, s->fog_enable);
 	if (CH(fog)) glUniform3f(u_fogColor, s->fog[0], s->fog[1], s->fog[2]);
 	if (CH(blend_double)) glUniform1i(u_blendDouble, s->blend_double);
@@ -1547,44 +2391,147 @@ static void gl_apply(const RenderState *s) {
 	if (CH(ct_mask)) glUniform3i(u_ctMask, s->ct_mask[0], s->ct_mask[1], s->ct_mask[2]);
 	if (CH(uvs)) glUniform2f(u_uvScale, s->uvs[0], s->uvs[1]);
 	if (CH(env)) glUniform4f(u_envColor, s->env[0], s->env[1], s->env[2], 1.f);
-	if (s->tex_enable && CH(tex)) glBindTexture(GL_TEXTURE_2D, s->tex);
+	GLuint t0 = s->tex_enable ? s->tex : untextured_unit0(s);
+	if (t0 != unit0) {
+		glBindTexture(GL_TEXTURE_2D, t0);
+		unit0 = t0;
+	}
 	if (s->tex_enable && CH(sampler)) glBindSampler(0, samplers[s->sampler]);
 #undef CH
 	glc = *s;
-	if (!s->tex_enable) glc.tex = 0, glc.sampler = -1;  // not bound: compare as different next time
+	if (!s->tex_enable) glc.sampler = -1;  // not bound: compare as different next time
 	glc_valid = true;
 }
 
+// Batches: draws in a row with the same state share one glDrawElements. Vertices go to the GPU once
+// each (all_v) and the triangles as 32-bit indices into them (all_i): a strip of n vertices costs n
+// vertices and 3(n-2) indices instead of 3(n-2) vertices (a match draws ~40,000 strip vertices a
+// frame; as plain triangles that was ~8 MB of vertices a frame). A batch that ends (another state
+// comes) waits, recorded with its state; the batches go to the GPU together (glBufferSubData into
+// ring buffers made anew only when full) and are drawn in order when something needs the drawing
+// done (batch_flush: another render target, a texture refilled, the frame shown...) or when
+// FLUSH_BYTES are queued: the browser passes uploads to its GPU process through a shared buffer of a
+// few megabytes, and one huge upload a frame waits for it, where pieces overlap with the GPU's work.
+typedef struct {
+	RenderState st;
+	uint32_t first, n;  // indices
+} BatchRec;
+static BatchRec *recs;
+static size_t n_recs, recs_cap;
+static GVert *all_v;
+static size_t all_n, all_cap;  // the queued vertices (the open batch's included)
+static SVert *all_s;
+static size_t all_ns, all_scap;  // the queued sprite corners: sprite batches index these
+static uint32_t *all_i;
+static size_t all_ni, all_icap;  // the queued indices (into all_v, or all_s for a sprite batch)
+static size_t batch_first;      // the open batch's first index (all_i + batch_first ..all_ni)
 static RenderState batch_state;
-static GVert *batch_v;
-static size_t batch_n, batch_cap;
 static uint64_t stat_draws, stat_batches;
+static uint64_t draws_total;  // every draw so far (ge_draws_total: the display's frame pacing)
 
-static void batch_reserve(size_t n) {
-	if (batch_n + n <= batch_cap) return;
-	batch_cap = (batch_n + n) * 2 + 4096;
-	batch_v = realloc(batch_v, batch_cap * sizeof(GVert));
+static void batch_close(void) {
+	if (all_ni == batch_first) return;
+	if (n_recs == recs_cap) recs_cap = recs_cap * 2 + 64, recs = realloc(recs, recs_cap * sizeof *recs);
+	recs[n_recs++] = (BatchRec){batch_state, (uint32_t)batch_first, (uint32_t)(all_ni - batch_first)};
+	batch_first = all_ni;
+}
+
+#define VBO_RING (16u << 20)
+#define IBO_RING (4u << 20)
+#define FLUSH_BYTES (512u << 10)
+static size_t vbo_used = VBO_RING, ibo_used = IBO_RING;  // full: the first upload makes the buffers
+
+static size_t queued_bytes(void) { return all_n * sizeof(GVert) + all_ns * sizeof(SVert) + all_ni * sizeof(uint32_t); }
+
+// Room for nv more vertices (sprite corners if sprite) and ni more indices of the open batch.
+static void batch_reserve(bool sprite, size_t nv, size_t ni) {
+	if (!sprite && all_n + nv > all_cap) all_cap = (all_n + nv) * 2 + 4096, all_v = realloc(all_v, all_cap * sizeof(GVert));
+	if (sprite && all_ns + nv > all_scap) all_scap = (all_ns + nv) * 2 + 1024, all_s = realloc(all_s, all_scap * sizeof(SVert));
+	if (all_ni + ni > all_icap) all_icap = (all_ni + ni) * 2 + 4096, all_i = realloc(all_i, all_icap * sizeof(uint32_t));
+}
+
+// Uploads bytes of data to the ring buffer bound to target; returns its offset there.
+static size_t ring_upload(GLenum target, size_t ring, size_t *used, const void *data, size_t bytes) {
+	if (bytes > ring) {  // bigger than the whole ring: a buffer of its own
+		glBufferData(target, (GLsizeiptr)bytes, data, GL_STREAM_DRAW);
+		*used = ring;
+		return 0;
+	}
+	if (*used + bytes > ring) {
+		glBufferData(target, (GLsizeiptr)ring, NULL, GL_STREAM_DRAW);
+		*used = 0;
+	}
+	size_t at = *used;
+	glBufferSubData(target, (GLintptr)at, (GLsizeiptr)bytes, data);
+	*used += (bytes + 15) & ~(size_t)15;
+	return at;
+}
+
+// Points the vertex attributes at GVerts (or SVerts) at offset at of the vertex buffer. Attribute 5,
+// the sprite rectangle, is a constant "anywhere" for the others.
+static void vertex_layout(size_t at, bool sprite) {
+	GLsizei stride = sprite ? sizeof(SVert) : sizeof(GVert);
+#define ATTR(i, n, type, norm, f) glVertexAttribPointer(i, n, type, norm, stride, (void *)(at + offsetof(GVert, f)))
+	ATTR(0, 4, GL_FLOAT, GL_FALSE, x);
+	ATTR(1, 2, GL_FLOAT, GL_FALSE, u);
+	ATTR(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, c0);
+	ATTR(3, 4, GL_UNSIGNED_BYTE, GL_TRUE, c1);
+	ATTR(4, 1, GL_FLOAT, GL_FALSE, fog);
+#undef ATTR
+	if (sprite) {
+		glEnableVertexAttribArray(5);
+		glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, stride, (void *)(at + offsetof(SVert, box)));
+	}
+	else {
+		glDisableVertexAttribArray(5);
+		glVertexAttrib4f(5, -1e9f, -1e9f, 1e9f, 1e9f);
+	}
 }
 
 // Draws everything queued. Called whenever the GL is about to read or change something a queued
 // draw depends on (textures, framebuffers, presentation).
 static void batch_flush(void) {
-	if (!batch_n) return;
-	gl_apply(&batch_state);
-	glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(batch_n * sizeof(GVert)), batch_v, GL_STREAM_DRAW);
-	glDrawArrays(batch_state.mode, 0, (GLsizei)batch_n);
-	stat_batches++;
-	batch_n = 0;
+	batch_close();
+	if (n_recs) {
+		gl_apply(&recs[0].st);  // (the vertex array and buffers bound)
+		// The vertices and the sprite corners share the ring: made anew for the corners, it would
+		// lose the vertices just put in the old one (every ~5 s the main menu's background, its
+		// only vertices, came out black under the sprites of its interface). Room for both first.
+		size_t vbytes = (all_n * sizeof(GVert) + 15) & ~(size_t)15, both = vbytes + all_ns * sizeof(SVert);
+		if (all_n && all_ns && vbo_used + both > VBO_RING && both <= VBO_RING) {
+			glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)VBO_RING, NULL, GL_STREAM_DRAW);
+			vbo_used = 0;
+		}
+		size_t vat = all_n ? ring_upload(GL_ARRAY_BUFFER, VBO_RING, &vbo_used, all_v, all_n * sizeof(GVert)) : 0;
+		size_t sat = all_ns ? ring_upload(GL_ARRAY_BUFFER, VBO_RING, &vbo_used, all_s, all_ns * sizeof(SVert)) : 0;
+		size_t iat = ring_upload(GL_ELEMENT_ARRAY_BUFFER, IBO_RING, &ibo_used, all_i, all_ni * sizeof(uint32_t));
+		int layout = -1;
+		for (size_t i = 0; i < n_recs; i++) {
+			const RenderState *st = &recs[i].st;
+			gl_apply(st);
+			if (layout != st->sprite) layout = st->sprite, vertex_layout(layout ? sat : vat, layout);
+			glDrawElements(st->mode, (GLsizei)recs[i].n, GL_UNSIGNED_INT, (void *)(iat + recs[i].first * sizeof(uint32_t)));
+			stat_batches++;
+		}
+		n_recs = 0;
+	}
+	all_n = all_ns = all_ni = batch_first = 0;
 }
 
-// Starts or continues the batch for a draw with state s; the caller then appends its vertices.
-static void batch_begin(const RenderState *s, size_t max_verts) {
-	if (batch_n && (s->mode != GL_TRIANGLES || batch_state.mode != GL_TRIANGLES || memcmp(s, &batch_state, sizeof *s))) {
+// Starts or continues the batch for a draw with state s and room for nv vertices and ni indices;
+// the caller then appends them (indices count from all_v, or all_s for sprites). Another render
+// target draws what is queued first: what reads a framebuffer counts on its draws being done once
+// another one is drawn to.
+static void batch_begin(const RenderState *s, size_t nv, size_t ni) {
+	bool open = all_ni > batch_first, same = open && s->mode == GL_TRIANGLES && !memcmp(s, &batch_state, sizeof *s);
+	if (queued_bytes() >= FLUSH_BYTES || ((open || n_recs) && s->fbo != (open ? batch_state.fbo : recs[n_recs - 1].st.fbo)))
 		batch_flush();
-	}
-	if (!batch_n) batch_state = *s;
-	batch_reserve(max_verts);
+	else if (open && !same)
+		batch_close();
+	if (all_ni == batch_first) batch_state = *s;
+	batch_reserve(s->sprite, nv, ni);
 	stat_draws++;
+	draws_total++;
 }
 
 // The PSP state of the current draw.
@@ -1609,7 +2556,32 @@ static void build_state(RenderState *s, bool through, bool clear) {
 		s->depth_test = 1;
 		s->depth_func = GL_ALWAYS;
 		s->depth_mask = depth;
+		if (alpha) {  // the stencil takes the clear color's alpha (st_ref, set from the vertices)
+			s->st_on = 1;
+			s->st_func = GL_ALWAYS;
+			s->st_mask = 0xFF;
+			s->st_wmask = 0xFF;
+			s->st_ops[0] = s->st_ops[1] = s->st_ops[2] = GL_REPLACE;
+		}
 		return;
+	}
+	if (reg[0x24] & 1) {
+		static const GLenum ops[8] = {GL_KEEP, GL_ZERO, GL_REPLACE, GL_INVERT, GL_INCR, GL_DECR, GL_KEEP, GL_KEEP};
+		uint32_t dc = reg[0xDC], dd = reg[0xDD];
+		s->st_on = 1;
+		s->st_func = gl_func[dc & 7];
+		s->st_ref = (int32_t)((dc >> 8) & 0xFF);
+		s->st_mask = (int32_t)((dc >> 16) & 0xFF);
+		s->st_ops[0] = ops[dd & 7];
+		s->st_ops[1] = ops[(dd >> 8) & 7];
+		s->st_ops[2] = ops[(dd >> 16) & 7];
+		s->st_wmask = (int32_t)(~reg[0xE9] & 0xFF);
+		// Drawing only into the stencil (color masked, the same op whatever the depth test says):
+		// the PSP writes it everywhere the stencil test passes; PPSSPP treats the test as ALWAYS.
+		bool zt = reg[0x23] & 1;
+		if (((dd & 7) == ((dd >> 8) & 7) || !zt) && (dd & 7) == ((dd >> 16) & 7) && (reg[0xE8] & 0xFFFFFF) == 0xFFFFFF &&
+		    (!zt || (reg[0xE7] & 1)))
+			s->st_func = GL_ALWAYS;
 	}
 	// The framebuffer alpha channel is the stencil buffer: it is only written when the stencil
 	// test is on and some stencil op modifies it (otherwise blending reads a stencil-like alpha).
@@ -1626,7 +2598,11 @@ static void build_state(RenderState *s, bool through, bool clear) {
 		s->blend = 1;
 		s->bsrc = gl_blend_factor(sf, true, reg[0xE0]);
 		s->bdst = gl_blend_factor(df, false, reg[0xE1]);
-		s->blend_double = sf == 6;  // DOUBLESRCALPHA: src * 2a == (2 * src) * a
+		// DOUBLESRCALPHA / ONE_MINUS_DOUBLESRCALPHA: the source alpha doubled (to 1 at most) for
+		// both factors (games with alpha 0x80 as "opaque" blend src * 1 + dst * 0 with them)
+		// DOUBLESRCALPHA / DOUBLEINVSRCALPHA: the alpha doubled (2), or (GE_BLEND_DOUBLE_ALPHA 0, the
+		// older way) the source color for DOUBLESRCALPHA as the source factor (1)
+		s->blend_double = GE_BLEND_DOUBLE_ALPHA ? (sf == 6 || sf == 7 || df == 6 || df == 7 ? 2 : 0) : sf == 6;
 		if (s->bsrc == GL_CONSTANT_COLOR || s->bdst == GL_CONSTANT_COLOR) {
 			uint32_t fix = s->bsrc == GL_CONSTANT_COLOR ? reg[0xE0] : reg[0xE1];
 			s->bcolor[0] = (fix & 0xFF) / 255.f;
@@ -1642,9 +2618,11 @@ static void build_state(RenderState *s, bool through, bool clear) {
 		s->depth_func = gl_func[reg[0xDE] & 7];
 	}
 	s->depth_mask = !(reg[0xE7] & 1) && (reg[0x23] & 1);
-	if (!through && (reg[0x1D] & 1)) {
+	static int nocull = -1;  // PANGYA_NOCULL: draw both faces (debugging)
+	if (nocull < 0) nocull = getenv("PANGYA_NOCULL") != NULL;
+	if (!through && (reg[0x1D] & 1) && !nocull) {
 		s->cull = 1;
-		s->cull_face = (reg[0x9B] & 1) ? GL_FRONT : GL_BACK;
+		s->cull_face = (reg[0x9B] & 1) ? GL_BACK : GL_FRONT;
 	}
 	s->alpha_test = reg[0x22] & 1;
 	s->ct_func = (reg[0x27] & 1) ? (int)(reg[0xD8] & 3) : 1;
@@ -1654,6 +2632,7 @@ static void build_state(RenderState *s, bool through, bool clear) {
 	}
 	s->at_func = (int)(reg[0xDB] & 7);
 	s->at_ref = (float)((reg[0xDB] >> 8) & 0xFF);
+	s->at_mask = (int32_t)((reg[0xDB] >> 16) & 0xFF);
 	s->fog_enable = !through && (reg[0x1F] & 1);
 	uint32_t fc = reg[0xCF];
 	s->fog[0] = (fc & 0xFF) / 255.f;
@@ -1717,6 +2696,17 @@ static void draw_prim(uint32_t data) {
 	RenderState st;
 	build_state(&st, f.through, clear);
 	st.tex_enable = tex_on;
+	// A framebuffer read as a 565 texture has no alpha (the GE reads 1): ours keeps whatever alpha
+	// the draws left (a game's bloom reads its quarter-size copy so, and its glow came out patchy,
+	// the scenery showing through the fighters)
+	if (tex_on && tex_from_fbo && (reg[0xC3] & 0xF) == 0 && st.tfunc_rgba) st.tfunc_rgba = 2;
+	{  // A framebuffer read as a CLUT texture (its pixels as palette indices: the fight's shadows, an
+		// ID buffer with one bit per character projected onto the stage) is not done yet: drawn with
+		// its colors as they are, it painted the characters black; left out (PANGYA_FBO_CLUT=1 draws it).
+		static int raw = -1;
+		if (raw < 0) raw = getenv("PANGYA_FBO_CLUT") ? atoi(getenv("PANGYA_FBO_CLUT")) != 0 : !GE_FBO_CLUT_SKIP;
+		if (!raw && tex_on && tex_from_fbo && (reg[0xC3] & 0xF) >= 4) return;
+	}
 	if (tex_on) {
 		uint32_t flt = reg[0xC6], wrap = reg[0xC7];
 		st.tex = tex;
@@ -1748,15 +2738,32 @@ static void draw_prim(uint32_t data) {
 	uint64_t h_raw = 1469598103934665603ull;
 	uint32_t dump_idx[6];
 	float dump_pos[6][3];
+	xf_setup(&f, fbw, fbh, tw, th);
+	// Indexed draws name the same vertex several times: each one is transformed once per draw.
+	enum { VCACHE = 4096 };
+	static uint32_t vc_tag[VCACHE], vc_gen[VCACHE], vc_now;
+	static GVert vc_val[VCACHE];
+	bool vcache = isz != 0 && !dumping;
+	if (vcache && ++vc_now == 0) memset(vc_gen, 0, sizeof vc_gen), vc_now = 1;
 	for (int i = 0; i < count; i++) {
 		uint32_t vi = (uint32_t)i;
 		if (isz == 1) vi = M8(iaddr + (uint32_t)i);
 		else if (isz == 2) vi = M16(iaddr + (uint32_t)i * 2);
-		RawVert rv = {0};
+		uint32_t slot = vi & (VCACHE - 1);
+		if (vcache && vc_gen[slot] == vc_now && vc_tag[slot] == vi) {
+			tv[i] = vc_val[slot];
+			continue;
+		}
+		// (only what read_vertex may leave unwritten and a later step reads is cleared: zeroing the
+		// whole vertex was a memset call per vertex, millions a second in the browser)
+		RawVert rv;
 		if (f.morphs == 1) {
+			if (dumping) memset(&rv, 0, sizeof rv);  // (the dump hashes it whole)
+			else rv.uv[0] = rv.uv[1] = 0, rv.nrm[0] = rv.nrm[1] = rv.nrm[2] = 0;
 			read_vertex(&f, MP(vaddr + vi * (uint32_t)f.size * 1), &rv);
 		}
 		else {  // morph targets are stored back to back
+			memset(&rv, 0, sizeof rv);
 			for (int m = 0; m < f.morphs; m++) {
 				RawVert t = {0};
 				read_vertex(&f, MP(vaddr + (vi * (uint32_t)f.morphs + (uint32_t)m) * (uint32_t)f.size), &t);
@@ -1773,22 +2780,38 @@ static void draw_prim(uint32_t data) {
 			h_raw = hash_bytes((const uint8_t *)&rv, sizeof rv) ^ (h_raw * 31);
 			if (i < 6) dump_idx[i] = vi, memcpy(dump_pos[i], rv.pos, sizeof dump_pos[i]);
 		}
-		transform(&f, &rv, &tv[i], fbw, fbh, tw, th);
+		transform(&f, &rv, &tv[i]);
+		if (vcache) vc_gen[slot] = vc_now, vc_tag[slot] = vi, vc_val[slot] = tv[i];
 	}
-	if (tiles_on && tex_on && tile_cur && tile_cur->tile_key && f.through && (type == 6 || count <= 6)) {
-		int step = type == 6 ? 2 : count;
-		for (int i = 0; i + step <= count; i += step) {
-			float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f, u0 = 1e30f, v0 = 1e30f, u1 = -1e30f, v1 = -1e30f;
-			for (int k = i; k < i + step; k++) {
-				float w = tv[k].w != 0 ? tv[k].w : 1;
-				float x = (tv[k].x / w + 1) * 0.5f * fbw, y = (1 + tv[k].y / w) * 0.5f * fbh;  // GL's y is the framebuffer's rows
-				float u = tv[k].u / uvsx * (float)tw, v = tv[k].v / uvsy * (float)th;
-				x0 = fminf(x0, x), y0 = fminf(y0, y), x1 = fmaxf(x1, x), y1 = fmaxf(y1, y);
-				u0 = fminf(u0, u), v0 = fminf(v0, v), u1 = fmaxf(u1, u), v1 = fmaxf(v1, v);
-			}
-			fprintf(tiles_f, "%llu %06x %016llx %d %d %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f\n", (unsigned long long)frame_no,
-			        cur_fbo->addr, (unsigned long long)tile_cur->tile_key, tile_cur->tile_iw, tile_cur->tile_ih, x0, y0, x1, y1,
-			        u0, v0, u1, v1);
+	if (clear && st.st_on && count > 0) st.st_ref = tv[count - 1].c0[3];  // the clear's stencil value
+	if (tex_on && !tex_from_fbo && texcat_dir && texcat_dir != (const char *)1 && last_slot >= 0 && texcache[last_slot].tex == tex &&
+	    texcache[last_slot].cat_key && (f.through || (reg[0xC0] & 3) == 0)) {
+		texcat_extent(texcache[last_slot].cat_key, tv, count, tw, th);
+		if (f.through && !GE_TILES_PACK_KEY) tiles_log(texcache[last_slot].cat_key, tw, th, tv, count, type, fbw, fbh, tw, th, uvsx, uvsy);
+	}
+	if (GE_TILES_PACK_KEY && f.through && tex_on && last_slot >= 0 && texcache[last_slot].tex == tex && texcache[last_slot].tile_key &&
+	    tiles_enabled()) {
+		const TexEntry *e = &texcache[last_slot];
+		tiles_log(e->tile_key, e->tile_iw, e->tile_ih, tv, count, type, fbw, fbh, tw, th, uvsx, uvsy);
+	}
+	// PANGYA_GE_BIG=1 (diagnostics): blended draws of a few vertices covering most of the screen
+	static int ge_big = -1;
+	if (ge_big < 0) ge_big = getenv("PANGYA_GE_BIG") != NULL;
+	if (ge_big && !clear && (reg[0x21] & 1) && count > 0 && count <= 12) {
+		float bx0 = 1e30f, by0 = 1e30f, bx1 = -1e30f, by1 = -1e30f;
+		for (int i = 0; i < count; i++) {
+			float w = tv[i].w != 0 ? tv[i].w : 1e-9f;
+			float x = tv[i].x / w, y = tv[i].y / w;
+			bx0 = fminf(bx0, x), by0 = fminf(by0, y), bx1 = fmaxf(bx1, x), by1 = fmaxf(by1, y);
+		}
+		float cx = fmaxf(0, fminf(bx1, 1) - fmaxf(bx0, -1)), cy = fmaxf(0, fminf(by1, 1) - fmaxf(by0, -1));
+		if (cx * cy > 0.7f * 4) {
+			rt_log("GE big: frame %llu fb=%06x type=%d n=%d through=%d tex=%d@%08x %dx%d fmt=%d c0=%02x%02x%02x%02x "
+			       "blend=%03x/%06x/%06x st=%d func=%x op=%x zt=%d/%d bb=%.2f,%.2f,%.2f,%.2f w0=%.2f",
+			       (unsigned long long)frame_no, cur_fbo->addr, type, count, f.through, tex_on,
+			       ((reg[0xA8] & 0x0F0000u) << 8) | (reg[0xA0] & 0xFFFFFFu), tw, th, (int)(reg[0xC3] & 0xF),
+			       tv[0].c0[0], tv[0].c0[1], tv[0].c0[2], tv[0].c0[3], reg[0xDF], reg[0xE0], reg[0xE1], reg[0x24] & 1,
+			       reg[0xDC], reg[0xDD], reg[0x23] & 1, reg[0xDE] & 7, bx0, by0, bx1, by1, tv[0].w);
 		}
 	}
 	if (dumping) {
@@ -1803,9 +2826,13 @@ static void draw_prim(uint32_t data) {
 			float x = tv[i].x / w, y = tv[i].y / w;
 			bx0 = fminf(bx0, x), by0 = fminf(by0, y), bx1 = fmaxf(bx1, x), by1 = fmaxf(by1, y), wmin = fminf(wmin, tv[i].w);
 		}
-		fprintf(df, "D2 %d t=%d n=%d vt=%06x raw=%016llx mtx=%016llx bb=%.3f,%.3f,%.3f,%.3f wmin=%.3f v=%08x i=%08x at=%08x\n",
+		fprintf(df, "D2 %d t=%d n=%d vt=%06x raw=%016llx mtx=%016llx bb=%.3f,%.3f,%.3f,%.3f wmin=%.3f v=%08x i=%08x at=%08x fb=%06x tex=%d@%08x tm=%x"
+		        " blend=%d/%06x fix=%06x/%06x tfunc=%06x psm=%x tfmt=%x atest=%d/%06x stest=%d/%06x zt=%d/%x zmsk=%x cmask=%06x/%02x lmode=%d\n",
 		        draw_i, type, count, reg[0x12], (unsigned long long)h_raw, (unsigned long long)h_m, bx0, by0, bx1, by1, wmin, vaddr,
-		        iaddr, prim_cmd_addr);
+		        iaddr, prim_cmd_addr, cur_fbo->addr, tex_on, tex_on ? (((reg[0xA8] & 0xFF0000u) << 8) | (reg[0xA0] & 0xFFFFFFu)) : 0,
+		        reg[0xC0], reg[0x21] & 1, reg[0xDF] & 0xFFFFFF, reg[0xE0] & 0xFFFFFF, reg[0xE1] & 0xFFFFFF, reg[0xC9] & 0xFFFFFF,
+		        reg[0xD2] & 3, reg[0xC3] & 0xF, reg[0x22] & 1, reg[0xDB] & 0xFFFFFF, reg[0x24] & 1, reg[0xDC] & 0xFFFFFF,
+		        reg[0x23] & 1, reg[0xDE] & 7, reg[0xE7] & 1, reg[0xE8] & 0xFFFFFF, reg[0xE9] & 0xFF, reg[0x17] & 1);
 		// Vertices of PANGYA_GEDUMP_VERTS=vtype:mincount draws, and of small draws spanning more
 		// than the screen (the shape of a broken triangle).
 		static int want_n = -2;
@@ -1843,50 +2870,161 @@ static void draw_prim(uint32_t data) {
 		}
 	}
 
+	// The GE's vertex range culling: a primitive with a vertex outside the screen space it can
+	// address (x, y of 0..4096 before the drawing offset) is not drawn at all, nor (without depth
+	// clamping) one with a vertex outside the depth range; a vertex behind the near plane is
+	// clipped instead (as PPSSPP has it). The GL would draw such triangles stretched to the edge of
+	// the screen: polygons out of nowhere in some games' stages. cull[i]: tv[i] is out.
+	static uint8_t *cull;
+	static size_t cull_cap;
+	bool any_cull = false;
+	if (!f.through && count > 0) {
+		if ((size_t)count > cull_cap) cull_cap = (size_t)count * 2, cull = realloc(cull, cull_cap);
+		static int off = -1;
+		if (off < 0) off = getenv("PANGYA_NO_RANGE_CULL") != NULL;
+		float offx = (float)(reg[0x4C] & 0xFFFF) / 16.f, offy = (float)(reg[0x4D] & 0xFFFF) / 16.f;
+		float vsz = f24(reg[0x44]), vcz = f24(reg[0x47]);
+		bool clamp = reg[0x1C] & 1;  // depth clamping (CLIPENABLE)
+		for (int i = 0; i < count; i++) {
+			const GVert *g = &tv[i];
+			uint8_t out = 0;
+			if (!off && g->w != 0 && vsz != 0) {
+				float iw = 1.f / g->w;
+				// back to the GE's own projected z (the viewport may turn depth around)
+				float pz = ((g->z * iw + 1.f) * 32767.5f - vcz) / vsz;
+				if (!clamp && (pz < -1.00003f || pz > 1.00003f)) out = 1;
+				if (!clamp || pz * g->w > -g->w) {  // not clipped by the near plane
+					float X = (g->x * iw + 1.f) * fbw * 0.5f + offx, Y = (g->y * iw + 1.f) * fbh * 0.5f + offy;
+					if (X < 0 || X >= 4096.f || Y < 0 || Y >= 4096.f) out = 1;
+				}
+			}
+			cull[i] = out;
+			any_cull |= out;
+		}
+		static int log = -1;  // PANGYA_CULL_LOG=1: how many draws lost vertices to it
+		if (log < 0) log = getenv("PANGYA_CULL_LOG") != NULL;
+		if (log && any_cull && (type == 3 || type == 4 || type == 5)) {  // CULLDBG: culled triangles reaching the screen
+			static uint64_t lastf; static int n_this;
+			if (frame_no != lastf) lastf = frame_no, n_this = 0;
+			for (int i = 2; i < count && n_this < 3; i++) {
+				int a = type == 5 ? 0 : i - 2, b = i - 1, c3 = i;
+				if (type == 3 && i % 3 != 2) continue;
+				if (!(cull[a] | cull[b] | cull[c3])) continue;
+				int vis = 0; const int idx[3] = {a, b, c3};
+				char buf[300]; int o = 0;
+				for (int k = 0; k < 3; k++) {
+					const GVert *g = &tv[idx[k]];
+					float nx = g->w > 0 ? g->x / g->w : 99, ny = g->w > 0 ? g->y / g->w : 99;
+					if (fabsf(nx) <= 1 && fabsf(ny) <= 1) vis = 1;
+					o += snprintf(buf + o, sizeof buf - o, " (%.1f %.1f w=%.2f c=%d)", nx, ny, g->w, cull[idx[k]]);
+				}
+				if (vis) {
+					n_this++;
+					rt_log("CULLVIS f%llu vt=%06x type=%d n=%d tex=%08x v=%08x tri%d%s", (unsigned long long)frame_no, reg[0x12], type, count,
+					       ((reg[0xA8] & 0x0F0000u) << 8) | (reg[0xA0] & 0xFFFFFFu), vaddr, i, buf);
+				}
+			}
+		}
+		if (log) {
+			static uint64_t n_draws, n_hit, last;
+			n_draws++, n_hit += any_cull;
+			if (frame_no - last >= 300) rt_log("range cull: %llu of %llu draws had vertices out", (unsigned long long)n_hit, (unsigned long long)n_draws), n_draws = n_hit = 0, last = frame_no;
+		}
+		static int show = -1;  // PANGYA_CULL_SHOW=1 (tests): culled vertices drawn magenta instead of culled
+		if (show < 0) show = getenv("PANGYA_CULL_SHOW") != NULL;
+		if (show && any_cull) {
+			for (int i = 0; i < count; i++)
+				if (cull[i]) tv[i].c0[0] = 255, tv[i].c0[1] = 0, tv[i].c0[2] = 255, tv[i].c0[3] = 255;
+			any_cull = false;
+		}
+	}
 	// Assemble GL triangles (sprites -> two triangles, strips/fans -> lists) straight into the batch.
 	static int nodraw = -1;
 	if (nodraw < 0) nodraw = getenv("PANGYA_NODRAW") != NULL;
+	{  // PANGYA_SKIPDRAW=a-b (tests): the frame's draws a..b left out (finding what draws what)
+		static int skip_a = -2, skip_b;
+		static uint64_t fr;
+		static int nth;
+		if (skip_a == -2) {
+			skip_a = -1;
+			if (getenv("PANGYA_SKIPDRAW")) sscanf(getenv("PANGYA_SKIPDRAW"), "%d-%d", &skip_a, &skip_b);
+		}
+		if (fr != frame_no) fr = frame_no, nth = 0;
+		int me = nth++;
+		if (skip_a >= 0 && me >= skip_a && me <= skip_b) return;
+	}
 	st.mode = type == 0 ? GL_POINTS : type == 1 ? GL_LINES : type == 2 ? GL_LINE_STRIP : GL_TRIANGLES;
 	if (!nodraw && type <= 6) {
-		batch_begin(&st, (size_t)count * 3);
-		GVert *o = batch_v + batch_n;
-		size_t n = 0;
+		st.sprite = type == 6;
+		batch_begin(&st, (size_t)count * 2, (size_t)count * 3);
+		GVert *o = all_v + all_n;
+		uint32_t *ix = all_i + all_ni;
+		uint32_t b0 = (uint32_t)all_n;
+		size_t nv = 0, ni = 0;
 		switch (type) {
-		case 0: case 1: case 2: memcpy(o, tv, sizeof(GVert) * (size_t)count); n = (size_t)count; break;
-		case 3: n = (size_t)count - (size_t)count % 3; memcpy(o, tv, sizeof(GVert) * n); break;
+		case 0: case 1: case 2: case 3: {
+			nv = type == 3 ? (size_t)count - (size_t)count % 3 : (size_t)count;
+			memcpy(o, tv, sizeof(GVert) * nv);
+			size_t per = type == 0 ? 1 : type == 3 ? 3 : 2;
+			for (size_t i = 0; i < nv; i++) {
+				if (any_cull && type != 2 && i % per == 0) {  // the whole primitive goes when one of its vertices is out
+					bool out = false;
+					for (size_t k = i; k < i + per && k < nv; k++) out |= cull[k];
+					if (out) { i += per - 1; continue; }
+				}
+				ix[ni++] = b0 + (uint32_t)i;
+			}
+			break;
+		}
 		case 4:
-			for (int i = 2; i < count; i++) {
-				if (i & 1) { o[n++] = tv[i - 1]; o[n++] = tv[i - 2]; o[n++] = tv[i]; }
-				else { o[n++] = tv[i - 2]; o[n++] = tv[i - 1]; o[n++] = tv[i]; }
+			if (count < 3) break;
+			nv = (size_t)count;
+			memcpy(o, tv, sizeof(GVert) * nv);
+			for (uint32_t i = 2; i < (uint32_t)count; i++) {
+				if (any_cull && (cull[i] | cull[i - 1] | cull[i - 2])) continue;
+				if (i & 1) { ix[ni++] = b0 + i - 1; ix[ni++] = b0 + i - 2; }
+				else { ix[ni++] = b0 + i - 2; ix[ni++] = b0 + i - 1; }
+				ix[ni++] = b0 + i;
 			}
 			break;
 		case 5:
-			for (int i = 2; i < count; i++) { o[n++] = tv[0]; o[n++] = tv[i - 1]; o[n++] = tv[i]; }
+			if (count < 3) break;
+			nv = (size_t)count;
+			memcpy(o, tv, sizeof(GVert) * nv);
+			for (uint32_t i = 2; i < (uint32_t)count; i++) {
+				if (any_cull && (cull[0] | cull[i - 1] | cull[i])) continue;
+				ix[ni++] = b0; ix[ni++] = b0 + i - 1; ix[ni++] = b0 + i;
+			}
 			break;
 		case 6:
 			for (int i = 0; i + 1 < count; i += 2) {
+				if (any_cull && (cull[i] | cull[i + 1])) continue;
 				GVert tl = tv[i], br = tv[i + 1];  // the second vertex carries color/z
+				float bx[4] = {-1e9f, -1e9f, 1e9f, 1e9f};  // no rectangle
 				if (tex_on && !tex_from_fbo && tw > 0 && th > 0) {
 					// half a texel of the texture as sampled (an atlas redrawn at the render scale is finer)
 					float hu = 0.5f / ((float)tw * tex_scale), hv = 0.5f / ((float)th * tex_scale);
 					float u0 = fminf(tl.u, br.u), u1 = fmaxf(tl.u, br.u), v0 = fminf(tl.v, br.v), v1 = fmaxf(tl.v, br.v);
-					float bx[4] = {u0 + hu, v0 + hv, u1 - hu, v1 - hv};
+					bx[0] = u0 + hu, bx[1] = v0 + hv, bx[2] = u1 - hu, bx[3] = v1 - hv;
 					if (bx[0] > bx[2]) bx[0] = bx[2] = (u0 + u1) / 2.f;
 					if (bx[1] > bx[3]) bx[1] = bx[3] = (v0 + v1) / 2.f;
-					memcpy(br.box, bx, sizeof bx);
 				}
-				GVert v00 = br, v10 = br, v01 = br, v11 = br;
-				v00.x = tl.x, v00.y = tl.y, v00.u = tl.u, v00.v = tl.v;
-				v10.x = br.x, v10.y = tl.y, v10.u = br.u, v10.v = tl.v;
-				v01.x = tl.x, v01.y = br.y, v01.u = tl.u, v01.v = br.v;
-				v11.x = br.x, v11.y = br.y, v11.u = br.u, v11.v = br.v;
-				o[n++] = v00; o[n++] = v10; o[n++] = v01;
-				o[n++] = v10; o[n++] = v11; o[n++] = v01;
+				SVert *q = all_s + all_ns + nv;  // corners 00 10 01 11
+				for (int k = 0; k < 4; k++) q[k].v = br, memcpy(q[k].box, bx, sizeof bx);
+				q[0].v.x = tl.x, q[0].v.y = tl.y, q[0].v.u = tl.u, q[0].v.v = tl.v;
+				q[1].v.y = tl.y, q[1].v.v = tl.v;
+				q[2].v.x = tl.x, q[2].v.u = tl.u;
+				uint32_t k = (uint32_t)(all_ns + nv);
+				ix[ni++] = k, ix[ni++] = k + 1, ix[ni++] = k + 2;
+				ix[ni++] = k + 1, ix[ni++] = k + 3, ix[ni++] = k + 2;
+				nv += 4;
 			}
 			break;
 		default: break;
 		}
-		batch_n += n;
+		if (type == 6) all_ns += nv;
+		else all_n += nv;
+		all_ni += ni;
 		if (st.mode != GL_TRIANGLES) batch_flush();
 	}
 	if (gedebug && dbg_prims++ < 400) {
@@ -1899,11 +3037,11 @@ static void draw_prim(uint32_t data) {
 		       reg[0x22] & 1, reg[0xDB]);
 	}
 	if (dumping && getenv("PANGYA_GEDUMP_STATE")) {
-		fprintf(ge_dump_file, "DRAW type=%d n=%d vt=%06x tex=%d@%08x f%d %dx%d clut=%x | blend=%d df=%03x fa=%06x fb=%06x tfunc=%05x "
+		fprintf(ge_dump_file, "DRAW flt=%06x/%06x fbfmt=%d fb=%05x(%dx%d) type=%d n=%d vt=%06x tex=%d@%08x f%d %dx%d clut=%x | blend=%d df=%03x fa=%06x fb=%06x tfunc=%05x "
 		       "at=%d/%06x zt=%d/%d zmask=%d mask=%06x/%02x light=%d fog=%d clear=%x cull=%d/%d | c0=%02x%02x%02x%02x "
 		       "uv=(%.2f,%.2f) w=%.2f ct=%d/%d/%06x/%06x st=%d/%06x/%06x\n",
-		       type, count, reg[0x12], tex_on, ((reg[0xA8] & 0x0F0000u) << 8) | (reg[0xA0] & 0xFFFFFFu), (int)(reg[0xC3] & 0xF),
-		       tw, th, reg[0xC5], reg[0x21] & 1, reg[0xDF], reg[0xE0], reg[0xE1], reg[0xC9], reg[0x22] & 1, reg[0xDB],
+		       reg[0xC6], reg[0xC7], (int)(reg[0xD2] & 3), cur_fbo->addr, cur_fbo->width, cur_fbo->height, type, count, reg[0x12], tex_on,
+		       ((reg[0xA8] & 0x0F0000u) << 8) | (reg[0xA0] & 0xFFFFFFu), (int)(reg[0xC3] & 0xF), tw, th, reg[0xC5], reg[0x21] & 1, reg[0xDF], reg[0xE0], reg[0xE1], reg[0xC9], reg[0x22] & 1, reg[0xDB],
 		       reg[0x23] & 1, reg[0xDE] & 7, reg[0xE7] & 1, reg[0xE8], reg[0xE9], reg[0x17] & 1, reg[0x1F] & 1, reg[0xD3],
 		       reg[0x1D] & 1, reg[0x9B] & 1, tv[0].c0[0], tv[0].c0[1], tv[0].c0[2], tv[0].c0[3], tv[0].u, tv[0].v, tv[0].w,
 		       reg[0x27] & 1, reg[0xD8] & 3, reg[0xD9] & 0xFFFFFF, reg[0xDA] & 0xFFFFFF, reg[0x24] & 1, reg[0xDC] & 0xFFFFFF,
@@ -2044,12 +3182,28 @@ void ge_command(uint32_t cmd, uint32_t data, uint32_t addr) {
 			ge_dump_mtx_lines++;
 			fprintf(ge_dump_file, "W %08x [%d] %06x\n", addr, world_i, data);
 		}
-		if (world_i < 12) world[world_i++] = f24(data);
+		if (world_i < 12) {
+			float v = f24(data);
+			if (world[world_i] != v) world[world_i] = v, xf_gen++;
+			world_i++;
+		}
 		break;
 	case 0x3C: view_i = (int)(data & 0xF); break;
-	case 0x3D: if (view_i < 12) view[view_i++] = f24(data); break;
+	case 0x3D:
+		if (view_i < 12) {
+			float v = f24(data);
+			if (view[view_i] != v) view[view_i] = v, xf_gen++, vp_gen++;
+			view_i++;
+		}
+		break;
 	case 0x3E: proj_i = (int)(data & 0xF); break;
-	case 0x3F: if (proj_i < 16) proj[proj_i++] = f24(data); break;
+	case 0x3F:
+		if (proj_i < 16) {
+			float v = f24(data);
+			if (proj[proj_i] != v) proj[proj_i] = v, xf_gen++, vp_gen++;
+			proj_i++;
+		}
+		break;
 	case 0x40: tgen_i = (int)(data & 0xF); break;
 	case 0x41: if (tgen_i < 12) tgen[tgen_i++] = f24(data); break;
 	case 0x2A: bone_i = (int)(data & 0x7F); break;
@@ -2060,12 +3214,21 @@ void ge_command(uint32_t cmd, uint32_t data, uint32_t addr) {
 		uint32_t a = ((reg[0xB1] & 0xF0000u) << 8) | (reg[0xB0] & 0xFFFFFFu);
 		uint32_t bytes = (data & 0x3F) * 32;
 		if (bytes > sizeof clut) bytes = sizeof clut;
-		if (rt_valid(a, bytes)) memcpy(clut, MP(a), bytes);
-		clut_dirty = true;
+		// a game loads the same palette again draw after draw (thousands of times a frame): only one
+		// that changes what is there is hashed again
+		if (rt_valid(a, bytes) && memcmp(clut, MP(a), bytes)) memcpy(clut, MP(a), bytes), clut_dirty = true;
 		break;
 	}
 	case 0xEA: block_transfer(data); break;
-	default: break;
+	default:
+		// what xf_setup reads: lighting (0x17-0x1B, 0x50-0x9A), fog (0x1F, 0xCD, 0xCE), texture
+		// mapping (0x48-0x4B, 0xC0); and the viewport (0x42-0x47, 0x4C, 0x4D)
+		if (reg[cmd] != data && ((cmd >= 0x17 && cmd <= 0x1B) || cmd == 0x1F || (cmd >= 0x42 && cmd <= 0x9A) || cmd == 0xC0 ||
+		                         cmd == 0xCD || cmd == 0xCE)) {
+			xf_gen++;
+			if ((cmd >= 0x42 && cmd <= 0x47) || cmd == 0x4C || cmd == 0x4D) vp_gen++;
+		}
+		break;
 	}
 	reg[cmd] = data;
 }
@@ -2079,8 +3242,14 @@ void ge_forget_textures(void) {
 		texcache[i].hash = 0, texcache[i].checked = 0, texcache[i].pack1 = 0;
 		free(texcache[i].ui_orig);
 		texcache[i].ui_orig = NULL;
+		free(texcache[i].orig);
+		texcache[i].orig = NULL;
 		free(texcache[i].look);
 		texcache[i].look = NULL;
+		free(texcache[i].up_px);
+		texcache[i].up_px = NULL;
+		if (texcache[i].up_tex) glDeleteTextures(1, &texcache[i].up_tex);
+		texcache[i].up_tex = 0;
 	}
 	memset(memo, 0, sizeof memo);  // the pack or the switches changed
 }
@@ -2137,6 +3306,8 @@ void ge_unbind_target(void) {
 }
 
 // Draw calls the game issued and GL draws they were merged into, since the last call.
+uint64_t ge_draws_total(void) { return draws_total; }
+
 void ge_draw_stats(uint64_t *draws, uint64_t *batches) {
 	*draws = stat_draws;
 	*batches = stat_batches;

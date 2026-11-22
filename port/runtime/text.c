@@ -637,6 +637,77 @@ static void ui_apply_replacements(void) {
 		}
 }
 
+// The words inside their rectangle, outlines included. fit.py matched the letters to the
+// original's, but the font's shapes, the stroke and the outlines around them reach a little
+// further than the game's pixels: at the rectangle's edge they were cut (the colon of
+// "Bonus Pang :" lost its right side, the "C" of "Clear Bonus :" its left). Each line's ink
+// (the letters' boxes, grown by the stroke and the solid outlines; a glow counts half) is moved
+// inside, and condensed when it is wider than the room. PANGYA_UITEXT_FITLOG=1 lists them, PANGYA_UITEXT_FIT=0 leaves them.
+#define FIT_SLACK 0.5f
+static void ui_fit_sprites(void) {
+	int moved = 0, condensed = 0;
+	bool log = getenv("PANGYA_UITEXT_FITLOG") != NULL;
+	if (getenv("PANGYA_UITEXT_FIT") && !atoi(getenv("PANGYA_UITEXT_FIT"))) return;  // =0: as fit.py placed them
+	for (int i = 0; i < n_atlases; i++)
+		for (int j = 0; j < atlases[i].n; j++) {
+			UiSprite *s = &atlases[i].s[j];
+			const stbtt_fontinfo *fi = s->font == 1 ? &font_regular : &font;
+			float scale = stbtt_ScaleForMappingEmToPixels(fi, s->em);
+			float reach = (s->bold > 0 ? s->bold : 0) + 0.25f;  // (and the edge's antialiasing)
+			for (int r = 0; r < s->nrings; r++) reach += s->rw[r] < 0 ? -s->rw[r] * 0.5f : s->rw[r];
+			// A side counts where the box is the game's sprite edge too. A box drawn by hand inside a
+			// bigger sprite (labels.tsv "@x,y,w,h": a title on its bar) may be narrower than the
+			// original letters, which then show on past it: moved, the new ones would sit beside them.
+			bool hard_l = true, hard_r = true;
+			for (int k = 0; k < atlases[i].nrects; k++) {
+				const int *rc = atlases[i].rects[k];
+				if (rc[0] > s->x || rc[1] > s->y || rc[0] + rc[2] < s->x + s->w || rc[1] + rc[3] < s->y + s->h) continue;
+				hard_l = rc[0] == s->x, hard_r = rc[0] + rc[2] == s->x + s->w;
+				if (hard_l && hard_r) break;
+			}
+			const char *p = s->text;
+			for (int line = 0; line <= s->nlines && *p; line++) {
+				float *ox = line ? &s->lox[line - 1] : &s->ox, *sx = line ? &s->lsx[line - 1] : &s->sx;
+				float pen = 0, l = 1e9f, r = -1e9f;
+				int glyphs = 0;
+				while (*p && *p != '|') {
+					int ch = utf8_next(&p), adv, lsb, bx0, by0, bx1, by1;
+					glyphs += ch != ' ';
+					if (stbtt_GetCodepointBox(fi, ch, &bx0, &by0, &bx1, &by1) && bx1 > bx0) {
+						if (pen + (float)bx0 * scale * *sx < l) l = pen + (float)bx0 * scale * *sx;
+						if (pen + (float)bx1 * scale * *sx > r) r = pen + (float)bx1 * scale * *sx;
+					}
+					stbtt_GetCodepointHMetrics(fi, ch, &adv, &lsb);
+					pen += (float)adv * scale * *sx;
+					if (*p && *p != '|') {
+						const char *q = p;
+						pen += (float)stbtt_GetCodepointKernAdvance(fi, ch, utf8_next(&q)) * scale * *sx;
+					}
+				}
+				if (*p == '|') p++;
+				if (r <= l) continue;
+				float room = (float)s->w - 2.f * reach, L = *ox + l, R = *ox + r;
+				// a cut shows from about half a pixel; single letters and digits (glyph sets: the
+				// game sets them side by side, outlines overlapping) stay as they are
+				if ((!hard_l || L - reach >= -FIT_SLACK) && (!hard_r || R + reach <= (float)s->w + FIT_SLACK)) continue;
+				if (room <= 0 || glyphs <= 2 || !hard_l || !hard_r) continue;
+				float old_sx = *sx, oldL = L - reach, oldR = R + reach;
+				if (r - l > room) {  // condensed about its left edge, then laid from the left
+					float f = room / (r - l);
+					*sx *= f, l *= f, r *= f, condensed++;
+				}
+				else moved++;
+				L = *ox + l, R = *ox + r;
+				if (L - reach < 0) *ox += reach - L;
+				else if (R + reach > (float)s->w) *ox -= R + reach - (float)s->w;
+				if (log)
+					rt_log("text: fit %s %d,%d,%d,%d \"%.*s\": ink %.2f..%.2f -> %.2f..%.2f, stretch %.3f -> %.3f", atlases[i].name, s->x, s->y,
+					       s->w, s->h, (int)strcspn(s->text, "|"), s->text, oldL, oldR, *ox + l - reach, *ox + r + reach, old_sx, *sx);
+			}
+		}
+	if (moved || condensed) rt_log("text: %d UI sprite line(s) moved inside their rectangle, %d condensed to fit", moved, condensed);
+}
+
 // A word on its own over a background of its atlas (a bar, a picture): the sprite's rectangle has
 // non-transparent pixels along its edge. Clearing the whole rectangle there opened a hole in that
 // background (the bar went see-through around the word): only the old letters' surroundings are
@@ -1030,7 +1101,7 @@ static UiAtlas *ui_match(const uint32_t *px, int w, int h) {
 	ui_load();
 	if (ui_state <= 0) return NULL;
 	static bool replaced;
-	if (!replaced) replaced = true, ui_apply_replacements();
+	if (!replaced) replaced = true, ui_apply_replacements(), ui_fit_sprites();
 	struct { int w, h; uint32_t crc; } seen[16];
 	int n_seen = 0;
 	for (int i = 0; i < n_atlases; i++) {

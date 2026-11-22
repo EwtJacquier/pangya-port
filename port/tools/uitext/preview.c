@@ -21,6 +21,8 @@ uint64_t rt_now_us(void) {
 	return (uint64_t)ts.tv_sec * 1000000u + (uint64_t)ts.tv_nsec / 1000u;
 }
 
+int ge_tex_filter(void) { return 0; }  // (ge.c) the game's own filtering
+
 #define UITEXT_CPU_ONLY  // no GL here: the CPU drawing (the reference)
 #include "../../runtime/text.c"
 

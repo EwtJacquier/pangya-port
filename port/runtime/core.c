@@ -123,18 +123,22 @@ typedef struct {
 extern const size_t rt_func_count;
 extern const FuncEntry rt_func_table[];
 
+// Every code word's function (NULL where none starts), made once from the sorted table: an
+// indirect call is one load instead of a binary search (~5% of the CPU on the web).
+static RecompFunc *direct;
+static uint32_t direct_lo, direct_n;
+
 RecompFunc rt_lookup(uint32_t addr) {
-	size_t lo = 0, hi = rt_func_count;
-	while (lo < hi) {
-		size_t mid = (lo + hi) / 2;
-		if (rt_func_table[mid].addr < addr) {
-			lo = mid + 1;
-		}
-		else {
-			hi = mid;
-		}
+	if (!direct && rt_func_count) {
+		direct_lo = rt_func_table[0].addr;
+		direct_n = (rt_func_table[rt_func_count - 1].addr - direct_lo) / 4 + 1;
+		direct = calloc(direct_n, sizeof *direct);
+		if (!direct) rt_fatal("no memory for the function table");
+		for (size_t i = 0; i < rt_func_count; i++)
+			if (!(rt_func_table[i].addr & 3)) direct[(rt_func_table[i].addr - direct_lo) / 4] = rt_func_table[i].fn;
 	}
-	return (lo < rt_func_count && rt_func_table[lo].addr == addr) ? rt_func_table[lo].fn : NULL;
+	uint32_t i = (addr - direct_lo) / 4;
+	return !(addr & 3) && addr >= direct_lo && i < direct_n ? direct[i] : NULL;
 }
 
 void rt_call(CPU *c, uint32_t addr) {

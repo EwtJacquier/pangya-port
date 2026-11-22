@@ -121,6 +121,18 @@ void f_08b04438(CPU *c) {
 		const uint8_t *pl = MP(m + 8);
 		int sum = (int8_t)pl[0] + (int8_t)pl[1] + (int8_t)pl[2] + (int8_t)pl[3];
 		int check = sum < 0 ? -(-sum & 0x3ff) : sum & 0x3ff;
+		if (tracing() && type >= 0x20 && type <= 0x24 && type != 0x22 && type != 0x23 && (int)M32(m + 4) == check) {
+			static uint32_t seen[MAX_PLAYERS][2];  // (a message stays in its slot until the next one: logged once)
+			uint32_t k0, k1;
+			memcpy(&k0, pl, 4), memcpy(&k1, pl + 4, 4);
+			if (player >= 0 && player < MAX_PLAYERS && (seen[player][0] != (k0 ^ type) || seen[player][1] != k1)) {
+				seen[player][0] = k0 ^ type, seen[player][1] = k1;
+				float f;
+				memcpy(&f, pl + 4, 4);
+				rt_log("netplay: message %02x from player %d: '%c' %02x %02x %02x %02x (%f)", type, player, pl[0] >= 32 && pl[0] < 127 ? pl[0] : '?',
+				       pl[0], pl[1], pl[2], pl[3], f);
+			}
+		}
 		if ((type != 0x22 && type != 0x23) || (int)M32(m + 4) != check) continue;
 		if (player < 0 || player >= MAX_PLAYERS || player == me) continue;
 		int hole = pl[0x18];

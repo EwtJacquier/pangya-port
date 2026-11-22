@@ -4,7 +4,8 @@
 // Environment:
 //   PANGYA_HEADLESS=1          hidden window (automated runs; rendering still happens)
 //   PANGYA_DUMP=dir:N          write the displayed framebuffer every N vblanks to dir/NNNNNN.ppm
-//   PANGYA_INPUT="300:start,420:cross"  press buttons at given vblank counts (scripted tests)
+//   PANGYA_INPUT="300:start,420:cross"  press buttons at given vblank counts (scripted tests;
+//                              "500-560:left" holds; aleft/aright/aup/adown push the analog stick)
 //   PANGYA_FRAMES=N            exit after N vblanks
 #define _GNU_SOURCE
 #include <stdlib.h>
@@ -41,13 +42,20 @@ static ScriptedPress script[256];
 static void ge_stats_dump(void);
 static int script_len;
 
+// The analog stick in scripts (aleft, aright, aup, adown: pushed all the way), bits no button uses.
+#define STICK_LEFT 0x10000000u
+#define STICK_RIGHT 0x20000000u
+#define STICK_UP 0x40000000u
+#define STICK_DOWN 0x80000000u
+
 static uint32_t parse_button(const char *s) {
 	static const struct {
 		const char *n;
 		uint32_t b;
 	} map[] = {{"start", BTN_START}, {"select", BTN_SELECT}, {"up", BTN_UP}, {"down", BTN_DOWN},
 	           {"left", BTN_LEFT}, {"right", BTN_RIGHT}, {"l", BTN_L}, {"r", BTN_R},
-	           {"triangle", BTN_TRIANGLE}, {"circle", BTN_CIRCLE}, {"cross", BTN_CROSS}, {"square", BTN_SQUARE}};
+	           {"triangle", BTN_TRIANGLE}, {"circle", BTN_CIRCLE}, {"cross", BTN_CROSS}, {"square", BTN_SQUARE},
+	           {"aleft", STICK_LEFT}, {"aright", STICK_RIGHT}, {"aup", STICK_UP}, {"adown", STICK_DOWN}};
 	for (size_t i = 0; i < sizeof map / sizeof map[0]; i++) {
 		if (!strcmp(s, map[i].n)) {
 			return map[i].b;
@@ -169,6 +177,11 @@ void platform_vblank(void) {
 			buttons |= sp->buttons;  // taps last 6 vblanks
 		}
 	}
+	if (buttons & STICK_LEFT) analog_x = 0;
+	if (buttons & STICK_RIGHT) analog_x = 255;
+	if (buttons & STICK_UP) analog_y = 0;
+	if (buttons & STICK_DOWN) analog_y = 255;
+	buttons &= ~(STICK_LEFT | STICK_RIGHT | STICK_UP | STICK_DOWN);
 	int new_scale, new_filter;
 	// Test aid: PANGYA_RESCALE_AT=frame:scale changes the render scale like the settings menu.
 	static long rescale_at = -2;
@@ -320,6 +333,7 @@ typedef struct {
 	uint32_t stack[32], stack_off[32];
 	int sp;
 	bool done;
+	bool bbox;  // the last BOUNDINGBOX's result (BJUMP jumps when it was false)
 	uint32_t cbid;
 } GeList;
 #define MAX_GE_LISTS 64
@@ -365,7 +379,10 @@ static void ge_run(GeList *l) {
 		case 0x13: ge_offset_addr = data << 8; break;  // OFFSETADDR
 		case 0x14: ge_offset_addr = at; break;         // ORIGIN
 		case 0x08: l->pc = (ge_offset_addr + (l->base | (data & 0xFFFFFC))) & 0x0FFFFFFCu; break;  // JUMP
-		case 0x09: break;  // BJUMP: bounding-box culling not emulated, so always "visible"
+		case 0x07: l->bbox = ge_bounding_box(data & 0xFFFF); break;  // BOUNDINGBOX
+		case 0x09:  // BJUMP: past what follows when the box was out of sight
+			if (!l->bbox) l->pc = (ge_offset_addr + (l->base | (data & 0xFFFFFC))) & 0x0FFFFFFCu;
+			break;
 		case 0x0A:         // CALL
 			if (l->sp < 32) {
 				l->stack_off[l->sp] = ge_offset_addr;
@@ -404,6 +421,7 @@ static uint32_t ge_enqueue(uint32_t list, uint32_t stall) {
 		if (!ge_lists[i].used || ge_lists[i].done) {
 			GeList *l = &ge_lists[i];
 			memset(l, 0, sizeof *l);
+			l->bbox = true;
 			l->used = true;
 			l->start = l->pc = list & 0x0FFFFFFFu;
 			l->stall = stall ? (stall & 0x0FFFFFFFu) : 0xFFFFFFFFu;

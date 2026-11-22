@@ -1,12 +1,40 @@
 // VFPU (Allegrex vector unit) executor for the ~40 instruction forms the game uses.
 // Register storage is column-major per matrix: v[mtx*16 + col*4 + row]. Instruction register
 // fields use the hardware numbering mtx*4 + col + row*32 (+ transpose bit for vectors/matrices).
+#include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include <string.h>
 
 #include "rt.h"
 
 enum { PFX_S = 0, PFX_T = 1, PFX_D = 2, CC = 3 };
+
+// The VFPU's random number generator, as PPSSPP has worked it out from the PSP (MIPSVFPUUtils.cpp:
+// vrnd_init, vrnd_generate): an LCG, a xorshift and a Pell-like sequence kept in RCX0-7. The same
+// seed gives the same numbers on every copy (netplay).
+void vrnd_init(uint32_t seed, uint32_t *rcx) {
+	for (int i = 0; i < 8; ++i)
+		rcx[i] = 0x3F800000u | ((seed >> ((i / 4) * 16)) & 0xFFFFu) | (((seed >> (4 * i)) & 0xF) << 16);
+}
+
+uint32_t vrnd_generate(uint32_t *rcx) {
+	uint32_t A = (rcx[0] & 0xFFFFu) | (rcx[4] << 16), B = (rcx[1] & 0xFFFFu) | (rcx[5] << 16);
+	uint32_t C = (rcx[2] & 0xFFFFu) | (rcx[6] << 16), D = (rcx[3] & 0xFFFFu) | (rcx[7] << 16);
+	uint32_t E = 0;
+	for (int i = 0; i < 8; i++) E |= ((rcx[i] >> 16) & 0xF) << (4 * i);
+	A = 69069u * A + 1u;
+	B ^= B << 13;
+	B ^= B >> 17;
+	B ^= B << 5;
+	uint32_t t = 2u * D + C + E;
+	E = (uint32_t)(((uint64_t)C + (uint64_t)(D >> 1) + (uint64_t)E) >> 32);
+	C = D;
+	D = t;
+	uint32_t parts[8] = {A & 0xFFFFu, B & 0xFFFFu, C & 0xFFFFu, D & 0xFFFFu, A >> 16, B >> 16, C >> 16, D >> 16};
+	for (int i = 0; i < 8; i++) rcx[i] = 0x3F800000u | (((E >> (4 * i)) & 0xF) << 16) | parts[i];
+	return A + B + D;
+}
 
 static inline int vsize(uint32_t op) { return (int)(((op >> 7) & 1) | ((op >> 14) & 2)) + 1; }
 static inline int store_index(int mtx, int col, int row) { return mtx * 16 + (col & 3) * 4 + (row & 3); }
@@ -94,6 +122,25 @@ static void eat_prefixes(CPU *c) {
 }
 
 static float u2f(uint32_t u) { float f; memcpy(&f, &u, 4); return f; }
+
+// Floats to half floats as the PSP converts them (PPSSPP's float_to_half_fast3; the other way: half_to_float).
+static uint32_t float_to_half(float x) {
+	uint32_t f;
+	memcpy(&f, &x, 4);
+	uint32_t sign = f & 0x80000000u, o;
+	f ^= sign;
+	if (f >= (255u << 23)) o = f > (255u << 23) ? 0x7E00 | (f & 0x3FF) : 0x7C00;
+	else {
+		f &= ~0xFFFu;
+		float g = u2f(f) * u2f(15u << 23);
+		memcpy(&f, &g, 4);
+		f -= ~0xFFFu;
+		if (f > (31u << 23)) f = 31u << 23;
+		o = f >> 13;
+	}
+	return o | sign >> 16;
+}
+static float clamp01(float v) { return v <= 0.f ? 0.f : v > 1.f ? 1.f : v; }
 static uint32_t f2u(float f) { uint32_t u; memcpy(&u, &f, 4); return u; }
 
 static float half_to_float(uint16_t h) {
@@ -105,7 +152,47 @@ static float half_to_float(uint16_t h) {
 
 static _Noreturn void unknown(uint32_t pc, uint32_t op) { rt_fatal("VFPU instruction %08x at %08x not implemented", op, pc); }
 
+// PANGYA_VFPU_STATS=1 (diagnostics): at exit, the instruction forms run most (opcode, sub-op, size).
+static uint64_t vstat[1 << 11];
+static uint32_t vstat_op[1 << 11];
+static void vstat_report(void) {
+	int idx[1 << 11];
+	for (int i = 0; i < (1 << 11); i++) idx[i] = i;
+	for (int i = 0; i < 40; i++)
+		for (int j = i + 1; j < (1 << 11); j++)
+			if (vstat[idx[j]] > vstat[idx[i]]) { int t = idx[i]; idx[i] = idx[j]; idx[j] = t; }
+	uint64_t total = 0;
+	for (int i = 0; i < (1 << 11); i++) total += vstat[i];
+	fprintf(stderr, "VFPU: %llu instructions\n", (unsigned long long)total);
+	for (int i = 0; i < 40 && vstat[idx[i]]; i++)
+		fprintf(stderr, "  %5.1f%%  op=%08x (form %03x)\n", 100.0 * vstat[idx[i]] / total, vstat_op[idx[i]], idx[i]);
+}
+
+void rt_vfpu_mismatch(uint32_t pc, uint32_t op, const float *a, const float *b) {
+	static int n;
+	if (n++ > 50) return;
+	for (int i = 0; i < 128; i++) {
+		uint32_t x, y;
+		memcpy(&x, &a[i], 4), memcpy(&y, &b[i], 4);
+		if (x != y) rt_log("VFPU self-check: %08x at %08x: v[%d] inline %08x (%g), runtime %08x (%g)", op, pc, i, x, a[i], y, b[i]);
+	}
+}
+
+void rt_vfpu_ctrl_mismatch(uint32_t pc, uint32_t op, const uint32_t *a, const uint32_t *b) {
+	static int n;
+	if (n++ > 50) return;
+	for (int i = 0; i < 16; i++)
+		if (a[i] != b[i]) rt_log("VFPU self-check: %08x at %08x: control %d inline %08x, runtime %08x", op, pc, i, a[i], b[i]);
+}
+
 void rt_vfpu(CPU *c, uint32_t pc, uint32_t op) {
+	static int stats = -1;
+	if (stats < 0 && (stats = getenv("PANGYA_VFPU_STATS") != NULL)) atexit(vstat_report);
+	if (stats) {
+		uint32_t k = ((op >> 23) << 2 | ((op >> 7) & 1) | ((op >> 14) & 2)) & ((1 << 11) - 1);
+		vstat[k]++;
+		vstat_op[k] = op;
+	}
 	uint32_t o = op >> 26;
 	int vd = op & 0x7F, vs = (op >> 8) & 0x7F, vt = (op >> 16) & 0x7F, n = vsize(op);
 	float s[4] = {0}, t[4] = {0}, d[4] = {0};
@@ -251,6 +338,93 @@ void rt_vfpu(CPU *c, uint32_t pc, uint32_t op) {
 	}
 	case 0x34: {
 		int sub = (op >> 21) & 31, fn = (op >> 16) & 31;
+		if (sub == 1 && fn <= 3) {  // vrnds / vrndi / vrndf1 / vrndf2: the VFPU's random numbers (state in RCX0-7)
+			uint32_t *rcx = &c->vfpu_ctrl[8];
+			if (fn == 0) {  // seed: the register's bits
+				read_vec(c, vd, 1, d);
+				vrnd_init(f2u(d[0]), rcx);
+			} else {
+				for (int i = n - 1; i >= 0; i--) {  // written in backwards order
+					uint32_t r = vrnd_generate(rcx);
+					uint32_t u = fn == 1 ? r : (fn == 2 ? 0x3F800000u : 0x40000000u) | (r & 0x007FFFFFu);
+					memcpy(&d[i], &u, 4);
+				}
+				write_vec(c, vd, n, d);
+			}
+			eat_prefixes(c);
+			return;
+		}
+		if (sub == 21) {  // vcmov: s where the condition holds (imm 0-5: one CC bit; 6: per element)
+			int tf = (op >> 19) & 1, imm3 = fn & 7;
+			read_vec(c, vs, n, s);
+			apply_st(s, c->vfpu_ctrl[PFX_S], n);
+			read_vec(c, vd, n, d);
+			apply_st(d, c->vfpu_ctrl[PFX_T], n);
+			uint32_t cc = c->vfpu_ctrl[CC];
+			for (int i = 0; i < n; i++)
+				if (imm3 < 6 ? ((cc >> imm3) & 1) == (uint32_t)!tf : imm3 == 6 && ((cc >> i) & 1) == (uint32_t)!tf) d[i] = s[i];
+			write_vec(c, vd, n, d);
+			eat_prefixes(c);
+			return;
+		}
+		if (sub == 1 && (fn == 18 || fn == 19 || fn >= 24)) {  // vf2h / vh2f, vuc2i / vc2i / vus2i / vs2i, vi2uc / vi2c / vi2us / vi2s
+			uint32_t u[4] = {0}, w[4] = {0};
+			read_vec(c, vs, n, s);
+			apply_st(s, c->vfpu_ctrl[PFX_S], n);
+			for (int i = 0; i < 4; i++) u[i] = f2u(s[i]);
+			int outn = 1;
+			switch (fn) {
+			case 18:  // vf2h: two floats a word
+				w[0] = float_to_half(s[0]) | float_to_half(s[1]) << 16;
+				if (n >= 3) w[1] = float_to_half(s[2]) | float_to_half(s[3]) << 16, outn = 2;
+				break;
+			case 19:  // vh2f
+				for (int i = 0; i < (n == 1 ? 1 : 2); i++)
+					w[2 * i] = f2u(half_to_float((uint16_t)(u[i] & 0xFFFF))), w[2 * i + 1] = f2u(half_to_float((uint16_t)(u[i] >> 16)));
+				outn = n == 1 ? 2 : 4;
+				break;
+			case 24:  // vuc2i: each byte to the top of a word (x 0x01010101 >> 1)
+				for (int i = 0; i < 4; i++) w[i] = (uint32_t)((u[0] >> (8 * i)) & 0xFF) * 0x01010101u >> 1;
+				outn = 4;
+				break;
+			case 25:  // vc2i
+				for (int i = 0; i < 4; i++) w[i] = ((u[0] >> (8 * i)) & 0xFF) << 24;
+				outn = 4;
+				break;
+			case 26: case 27: {  // vus2i / vs2i: each halfword to the top of a word
+				int m = n >= 2 ? 2 : 1;
+				for (int i = 0; i < m; i++) {
+					uint32_t v = u[i];
+					w[2 * i] = fn == 26 ? (v & 0xFFFF) << 15 : (v & 0xFFFF) << 16;
+					w[2 * i + 1] = fn == 26 ? (v & 0xFFFF0000u) >> 1 : v & 0xFFFF0000u;
+				}
+				outn = 2 * m;
+				break;
+			}
+			case 28: case 29:  // vi2uc / vi2c: four words to their top bytes
+				for (int i = 0; i < 4; i++) {
+					int32_t v = (int32_t)u[i];
+					uint32_t b = fn == 28 ? (uint32_t)((v < 0 ? 0 : v) >> 23) & 0xFF : (u[i] >> 24);
+					w[0] |= b << (8 * i);
+				}
+				break;
+			default: {  // 30 vi2us / 31 vi2s: pairs of words to halfwords
+				int m = (n + 1) / 2;
+				for (int i = 0; i < m; i++) {
+					int32_t lo = (int32_t)u[2 * i], hi = (int32_t)u[2 * i + 1];
+					if (fn == 30) {
+						lo = (lo < 0 ? 0 : lo) >> 15, hi = (hi < 0 ? 0 : hi) >> 15;
+						w[i] = ((uint32_t)lo & 0xFFFF) | ((uint32_t)hi & 0xFFFF) << 16;
+					} else w[i] = (u[2 * i] >> 16) | (u[2 * i + 1] & 0xFFFF0000u);
+				}
+				outn = m;
+			}
+			}
+			for (int i = 0; i < 4; i++) d[i] = u2f(w[i]);
+			write_vec(c, vd, outn, d);
+			eat_prefixes(c);
+			return;
+		}
 		if (sub == 3) {  // vcst
 			static const float k[20] = {0.f, 3.40282347e38f, 1.41421356f, 0.70710678f, 1.12837917f, 0.63661977f,
 			                            0.31830989f, 0.78539816f, 1.57079633f, 3.14159265f, 2.71828183f, 1.44269504f,
@@ -297,6 +471,9 @@ void rt_vfpu(CPU *c, uint32_t pc, uint32_t op) {
 				case 0x00: d[i] = s[i]; break;
 				case 0x01: d[i] = fabsf(s[i]); break;
 				case 0x02: d[i] = -s[i]; break;
+				case 0x03: d[i] = i == (vd & (n >= 3 ? 3 : 1)) ? 1.f : 0.f; break;  // vidt
+				case 0x04: d[i] = clamp01(s[i]); break;  // vsat0
+				case 0x05: d[i] = s[i] <= -1.f ? -1.f : s[i] > 1.f ? 1.f : s[i]; break;  // vsat1
 				case 0x06: d[i] = 0.f; break;
 				case 0x07: d[i] = 1.f; break;
 				case 0x10: d[i] = 1.f / s[i]; break;
@@ -315,6 +492,13 @@ void rt_vfpu(CPU *c, uint32_t pc, uint32_t op) {
 		else {  // sub == 2: VFPU9 group
 			switch (fn) {
 			case 0x04: for (int i = 0; i < n; i++) d[i] = 1.f - s[i]; break;  // vocp
+			case 0x05: {  // vsocp: (1 - x, x) for each, saturated
+				float a = s[0], b = s[1];
+				d[0] = clamp01(1.f - a), d[1] = clamp01(a);
+				if (n >= 2) d[2] = clamp01(1.f - b), d[3] = clamp01(b), outn = 4;
+				else outn = 2;
+				break;
+			}
 			case 0x06: d[0] = 0; for (int i = 0; i < n; i++) d[0] += s[i]; outn = 1; break;  // vfad
 			case 0x07: d[0] = 0; for (int i = 0; i < n; i++) d[0] += s[i]; d[0] /= (float)n; outn = 1; break;  // vavg
 			case 0x0A: for (int i = 0; i < n; i++) d[i] = s[i] > 0 ? 1.f : s[i] < 0 ? -1.f : 0.f; break;  // vsgn
@@ -328,6 +512,19 @@ void rt_vfpu(CPU *c, uint32_t pc, uint32_t op) {
 	case 0x3C: {  // matrix ops
 		int idx = (op >> 21) & 31, group = idx >> 2;
 		float ms[16], mt[16], md[16];
+		if (idx == 29) {  // vrot: sine and cosine of a quarter-turn angle into chosen lanes
+			int imm = (op >> 16) & 31, sl = (imm >> 2) & 3, cl = imm & 3;
+			read_vec(c, vs, 1, s);
+			apply_st(s, c->vfpu_ctrl[PFX_S], 1);
+			float sn = sinf(s[0] * (float)M_PI_2), cs = cosf(s[0] * (float)M_PI_2);
+			if (imm & 0x10) sn = -sn;
+			for (int i = 0; i < 4; i++) d[i] = sl == cl ? sn : 0.f;
+			d[sl] = sn;
+			d[cl] = cs;
+			write_vec(c, vd, n, d);
+			eat_prefixes(c);
+			return;
+		}
 		if (idx == 28) {  // vmmov / vmidt / vmzero / vmone
 			int fn = (op >> 16) & 15;
 			if (fn == 0) read_mat(c, vs, n, md);

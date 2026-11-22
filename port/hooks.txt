@@ -62,3 +62,4 @@
 089c994c  # loads a look into a character model -> mods/turns.c (this copy's character in another costume: its own look first)
 08ac5758  # releases a resource from its cache -> mods/turns.c (tests: PANGYA_DBG_RELEASE logs one released twice)
 08ac5ed4  # ReleaseAllPets -> mods/turns.c (tests: PANGYA_DBG_RELEASE checks the manager's list first)
+088d016c  # the camera's update (CCamera, every frame) -> mods/turns.c (in turns: the player's camera on every copy)

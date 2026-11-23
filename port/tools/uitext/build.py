@@ -314,7 +314,53 @@ NO_GLOW = [(r'gui_uv_2', r'icon_skip|icon_replay', None), (r'nexthole', r'holelo
 # at its own place and size: Free Round's options under the cursor all as "Random" (Front, Sequence,
 # Holes, 9-H and 18-H had come out with a thicker white and a thinner blue outline; the user's call).
 # (atlas, sprite names, the sprite whose look they take).
-LOOK_LIKE = [(r'stroke_1|multi_room_setting', r'txt_(front|sequence|holes|9hole|18hole|back)_on_C', 'txt_shuffle_on_C')]
+# Also their Mode / Single / Team (Single and Mode had come out in the other font): selected as "Random",
+# unselected as unselected "Front".
+LOOK_LIKE = [(r'stroke_1|multi_room_setting', r'txt_(front|sequence|holes|3hole|6hole|9hole|18hole|back)_on_C|(mode|single|team)_on_C',
+              'txt_shuffle_on_C'),
+             (r'stroke_1|multi_room_setting', r'(mode|single|team)_off_C', 'txt_front_off_C')]
+
+
+# Sprites fitted again in another sprite's font, weight and outlines, their colours their own: Network
+# Mode's Create Room options, courses and its unselected Team / Single had come out in the other
+# font (Front, Random, 3-H..18-H...); the user wants Free Round's. (atlas, sprite names, label text or
+# None for any, the model's atlas, the model's name from the name's match)
+FIT_LIKE = [(r'network_roommake', r'(on|off)_text_\w+_C|off_icon_(team|single)', None, 'stroke_1',
+             lambda m: 'txt_shuffle_on_C' if m.group(0).startswith('on') else 'txt_front_off_C')]
+# Parts of another sprite's look taken as they are (each sprite keeps its own place and size), the
+# user's calls: Create Room's selected Team / Single in Free Round's font (their pink and orange kept);
+# Free Round's course descriptions (plain white) in the look of the course comments Create Room shows
+# (gold outlines). (atlas, sprite names, label text or None, the model's atlas, the model's name from
+# the name's match, the fields taken)
+# Sprites the game draws over another one, their letters on its letters: the same font, weight,
+# size and stretch as that one, placed by the offset the two have in the game (the loading screen's
+# "Now Loading..." light, white, sweeps over the yellow one 2 texels right and down: fitted apart,
+# they came out in two fonts, out of line; the user's call).
+# (atlas, sprite name, the model sprite's name, dx, dy: where the sprite sits on the model's)
+ALIGN_LIKE = [(r'_loading', 'txt_nowloading_g_I', 'txt_nowloading_I', 2, 2)]
+# The main menu's titles (the black band at its top: Story Mode, Pangya Tour Mode, Network Mode,
+# Pangya Collection, Options) and Equipment Management's are plain white letters in the game; the fit gave them a soft yellow
+# ring and glow. White sprites in that yellow look, in these atlases, get none (the user's call: as
+# Pangya Collection > Pangya Shop's title; the other screens' titles keep theirs).
+PLAIN_TITLE_ATLASES = r'ui_menu|equipment'
+
+
+def title_look(fit):
+    """White letters with only a yellowish ring and glow around them."""
+    white = all(min(c[:3]) >= 0xf8 for c in (fit['ft'], fit['fb']))
+    yellow = lambda c: c[0] >= 0xf0 and c[1] >= 0xa0 and c[2] < c[1]
+    glow = fit.get('glow')
+    return bool(white and glow and yellow(glow[1]) and all(yellow(c) or min(c[:3]) >= 0xf0 for _, c in fit['rings']))
+
+
+LOOK_FIELDS = ('font', 'bold', 'rings', 'ft', 'fb', 'ext', 'glow')
+COPY_LOOK = [(r'network_roommake', r'on_icon_(team|single)', None, 'stroke_1', lambda m: 'txt_shuffle_on_C', ('font', 'bold'))]
+# Looks given outright (each sprite keeps its own place and size): Free Round's course descriptions
+# (plain white on the course banners) white with a thin black outline, as Network Mode's course
+# select shows them (drawn there by the game's font engine; the user's call).
+# (atlas, sprite names, label text or None, fields)
+SET_LOOK = [(r'stroke_[234]', r'\w+', r'An? .*', dict(ft=(255, 255, 255, 255), fb=(255, 255, 255, 255),
+                                                     rings=[(0.75, (0, 0, 0, 255))], glow=None, ext=0.0, font=0, bold=0.0))]
 
 
 def no_glow(atlas, name, text=None):
@@ -1018,6 +1064,26 @@ def main():
                     if out:
                         results[(atlas, rect)] = out
                 print(f'hollow set {ta} {hset}: font {fx["font"]}, weight {fx["bold"]}, outline {fx["rings"][0][0]}', flush=True)
+    # FIT_LIKE: fitted again in the model's look (its colours left to each sprite's own)
+    for pat, names, text_pat, model_atlas, model_of in FIT_LIKE:
+        mrects = {name_of[k]: k for k in results if k[0] == model_atlas and k in name_of}
+        for k in sorted(results):
+            m = re.fullmatch(names, name_of.get(k, '')) if re.fullmatch(pat, k[0]) else None
+            mk = mrects.get(model_of(m)) if m else None
+            if not mk or k not in alljobs or len(results.get(mk, [])) != 1 or len(results[k]) != 1:
+                continue
+            if text_pat and not re.fullmatch(text_pat, results[k][0]['text']):
+                continue
+            ref = results[mk][0]['fit']
+            fixed = dict(font=ref['font'], bold=ref['bold'], rings=ref['rings'], ext=ref.get('ext', 0.0),
+                         glow=(ref['glow'][0], None) if ref.get('glow') else None,
+                         force=True)  # (a look imposed on purpose: kept however far from the original's)
+            jb = alljobs[k]
+            _, _, out = _job((jb[0], jb[1], jb[2], jb[3], results[k][0]['text'], fixed) + tuple(jb[6:]))
+            if os.environ.get('UITEXT_DEBUG'):
+                print('fit like', k, results[k][0]['text'][:30], 'ok' if out else 'NO FIT', flush=True)
+            if out:
+                results[k] = out
     # Colors close to their group's are the group's (labels of one menu look identical).
     by_group = {}
     for key, out in results.items():
@@ -1057,6 +1123,7 @@ def main():
                     x, y, w, h = e['rect']
                     glossy.setdefault((a, group_of.get((a, rect))), []).append(atlases[a].crop((x, y, x + w, y + h)))
     glossy = {k: glossy_colors(v) for k, v in glossy.items()}
+    by_name = {(k[0], n): k for k, n in name_of.items() if k in results}  # COPY_LOOK's models
     # LOOK_LIKE: each atlas's model sprites, by name
     models = {}
     for (a, rect), out in results.items():
@@ -1078,6 +1145,25 @@ def main():
                     if m and e['kind'] == 'S' and re.fullmatch(pat, atlas) and re.fullmatch(names, name):
                         e = dict(e, fit=dict(e['fit'], rings=m['rings'], ft=m['ft'], fb=m['fb'], font=m['font'], bold=m['bold'],
                                              ext=m.get('ext', 0.0), glow=m.get('glow')))
+                for pat, nm, model, dx, dy in ALIGN_LIKE:
+                    mk = by_name.get((atlas, model)) if re.fullmatch(pat, atlas) and name == nm else None
+                    if mk and len(results.get(mk, [])) == 1:
+                        ref = results[mk][0]['fit']
+                        e = dict(e, fit=dict(e['fit'], font=ref['font'], bold=ref['bold'], em=ref['em'], sx=ref['sx'],
+                                             ox=ref['ox'] - dx, oy=ref['oy'] - dy))
+                if e['kind'] == 'S' and re.fullmatch(PLAIN_TITLE_ATLASES, atlas) and title_look(e['fit']):
+                    e = dict(e, fit=dict(e['fit'], rings=[], glow=None))
+                for pat, names, text_pat, look in SET_LOOK:
+                    if re.fullmatch(pat, atlas) and re.fullmatch(names, name) and (not text_pat or re.fullmatch(text_pat, e['text'])):
+                        e = dict(e, fit=dict(e['fit'], **look))
+                for pat, names, text_pat, model_atlas, model_of, fields in COPY_LOOK:
+                    mm = re.fullmatch(names, name) if re.fullmatch(pat, atlas) else None
+                    if not mm or (text_pat and not re.fullmatch(text_pat, e['text'])):
+                        continue
+                    mk = by_name.get((model_atlas, model_of(mm)))
+                    if mk and len(results.get(mk, [])) == 1:
+                        ref = results[mk][0]['fit']
+                        e = dict(e, fit=dict(e['fit'], **{f: ref.get(f, 0.0 if f == 'ext' else None) for f in fields}))
                 # left out after fitting: the sprites fitted with them as a group keep their look
                 if as_texture(atlas, name_of.get((a, rect), ''), e['text']):
                     continue

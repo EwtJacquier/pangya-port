@@ -428,8 +428,10 @@ def fit(text, orig, sil_box, bg=None, fonts=(0, 1), fixed=None, sx_range=(0.62, 
         return found
 
     if fixed:
+        # (fixed['rings'] as a fit gives them, outside-in; the search takes the widths inside-out:
+        # read as they were, a group's members came out with their outlines' widths swapped)
         found = search([(fixed['font'], int(round(fixed['bold'] * K)),
-                         tuple(int(round(r * K)) for r, _ in fixed['rings']), e) for e in exts])
+                         tuple(int(round(r * K)) for r, _ in reversed(fixed['rings'])), e) for e in exts])
     else:
         # Up to two outlines first; a third only on the looks that came out best.
         found = search([(idx, b, ws, e) for idx in fonts for b in (0, 1, 2) for total in range(0, 17)

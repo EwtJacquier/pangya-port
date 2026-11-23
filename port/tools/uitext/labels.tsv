@@ -449,8 +449,8 @@ network_roommake	on_text_sepiaw_C	119,64,82,20	Sepia Wind
 network_roommake	on_text_whill_C	119,43,64,20	Wind Hill
 network_roommake	on_text_bmoon_C	119,22,77,20	Blue Moon
 network_roommake	off_text_blagoon_C	245,1,91,20	Blue Lagoon
-network_roommake	off_icon_team	290,342,83,28	Team
-network_roommake	off_icon_single	374,342,83,28	Single
+network_roommake	off_icon_team	290,342,83,28	@36,5,44,18 Team
+network_roommake	off_icon_single	374,342,83,28	@31,5,49,18 Single
 network_roommake	on_icon_single	206,342,83,28	@31,5,49,18 Single
 network_roommake	on_icon_team	122,342,83,28	@36,5,44,18 Team
 network_roommake	on_text_blagoon_C	119,1,91,20	Blue Lagoon

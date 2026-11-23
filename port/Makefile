@@ -61,11 +61,17 @@ WEB_EXTRA_FILES = $(if $(wildcard assets/fonts/*),--preload-file assets/fonts@/a
 	$(if $(wildcard generated/ui_text.spec),--preload-file generated/ui_text.spec@/generated/ui_text.spec)
 WEB_EXTRA_DEPS = $(wildcard assets/fonts/*) $(wildcard generated/ui_text.spec)
 
-web: build/web/index.html build/web/livekit-client.umd.js $(patsubst web/%,build/web/%,$(wildcard web/*.png))
+web: build/web/index.html build/web/livekit-client.umd.js $(patsubst web/%,build/web/%,$(wildcard web/*.png)) \
+	$(patsubst assets/fonts/%,build/web/fonts/%,$(wildcard assets/fonts/*.otf))
 
 build/web/livekit-client.umd.js: web/livekit-client.umd.js | build/web
 	cp $< $@
 build/web/%.png: web/%.png | build/web
+	cp $< $@
+
+# the page's own lettering: the font the game's screens are drawn in (web/shell.html @font-face)
+build/web/fonts/%.otf: assets/fonts/%.otf
+	mkdir -p build/web/fonts
 	cp $< $@
 
 build/web/index.html: $(WGEN_OBJ) $(WRT_OBJ) $(WMOD_OBJ) web/shell.html web/audio.js web/net.js $(WEB_EXTRA_DEPS) | build/web

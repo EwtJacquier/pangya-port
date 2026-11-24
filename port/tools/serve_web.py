@@ -240,6 +240,26 @@ def main():
 
     pack_size = {}  # the pack's pictures' bytes, for the page's first-visit download (by the index's mtime)
 
+    movie_sums = {}  # (name, mtime_ns, size) -> sha1 of an HD movie
+
+    def movie_list():
+        """The pack's HD movies (movies/<name>.h264, not empty), with their contents' sums: the page
+        keeps them for good (its preload) and asks again only for a changed one; twins (credits,
+        FEMain) are fetched once."""
+        out = []
+        try:
+            for f in sorted((textures / "movies").glob("*.h264")):
+                st = f.stat()
+                if not st.st_size or not re.fullmatch(r"[a-z0-9_]{1,40}", f.stem):
+                    continue
+                k = (f.stem, st.st_mtime_ns, st.st_size)
+                if k not in movie_sums:
+                    movie_sums[k] = hashlib.sha1(f.read_bytes()).hexdigest()[:16]
+                out.append({"name": f.stem, "bytes": st.st_size, "sum": movie_sums[k]})
+        except OSError:
+            pass
+        return out
+
     def pack_bytes():
         try:
             stamp = (textures / "index.txt").stat().st_mtime_ns
@@ -351,7 +371,8 @@ def main():
                 env = read_env(env_file)
                 return self.send_bytes(json.dumps({
                     "livekit": all(env.get(k) for k in ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET")),
-                    "textures": pack_count(), "textures_bytes": pack_bytes(), "iso": iso.is_file()}).encode(), "application/json")
+                    "textures": pack_count(), "textures_bytes": pack_bytes(), "iso": iso.is_file(),
+                    "movies": movie_list()}).encode(), "application/json")
             if self.path.split("?")[0] == "/account/me":
                 key, name = accounts.who(self.headers.get("X-Pangya-Session"))
                 return self.send_json(200, {"name": name}) if key else self.send_json(401, "no session")
@@ -384,6 +405,31 @@ def main():
             if self.path.split("?")[0] == "/textures/index.txt":  # empty while there is no pack
                 f = textures / "index.txt"
                 return self.send_bytes(f.read_bytes() if f.is_file() else b"", "text/plain")
+            mv = re.fullmatch(r"/textures/(movies/[a-z0-9_]{1,40}\.h264)", self.path.split("?")[0])
+            if mv:  # an HD movie (runtime/psmf.c): its name stays when it is made again, so not kept long
+                f = textures / mv.group(1)
+                if not f.is_file():  # most movies have none: "nothing" rather than an error in the page's console
+                    self.send_response(204)
+                    self.send_header("Content-Length", "0")
+                    self.send_header("Cache-Control", "no-cache")
+                    self.end_headers()
+                    return
+                data = f.read_bytes()
+                # its sum as an ETag: a browser that has it asks and gets "not modified"
+                tag = '"' + hashlib.sha1(data).hexdigest()[:16] + '"'
+                if self.headers.get("If-None-Match") == tag:
+                    self.send_response(304)
+                    self.send_header("ETag", tag)
+                    self.send_header("Cache-Control", "no-cache")
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "video/h264")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("ETag", tag)
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                return self.wfile.write(data)
             m = re.fullmatch(r"/textures/([0-9a-f]{16}-[0-9a-z]{1,24}\.qoi|font-[0-9a-f]{16}\.(qoi|txt))", self.path.split("?")[0])
             if m:
                 f = textures / m.group(1)

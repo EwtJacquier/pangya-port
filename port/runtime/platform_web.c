@@ -248,7 +248,8 @@ EM_JS(void, js_fetch, (const char *urlp, const char *pathp), {
 		FS.rename(path + '.part', path);
 	};
 	const pack = Module.pangyaTexture && url.startsWith('textures/') && !url.startsWith('textures/font-') && url.endsWith('.qoi');
-	(pack ? Module.pangyaTexture(url) : fetch(url).then((r) => {
+	const movie = Module.pangyaMovie && url.startsWith('textures/movies/');  // kept in this browser (web/shell.html)
+	(pack ? Module.pangyaTexture(url) : movie ? Module.pangyaMovie(url) : fetch(url).then((r) => {
 		if (!r.ok) throw new Error('HTTP ' + r.status);
 		return r.arrayBuffer().then((b) => new Uint8Array(b));
 	})).then(done).catch((e) => {

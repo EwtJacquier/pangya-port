@@ -1,11 +1,15 @@
 // scePsmfPlayer: PSP movies (.pmf = 0x800-byte PSMF header + MPEG-PS with H.264 video and
 // ATRAC3+ audio in private stream 1). Own demuxer reading the disc in chunks, FFmpeg for the
 // H.264 and ATRAC3+ decoding. Video frames are written as RGBA8888 into the buffer the game
-// passes to GetVideoData; audio is handed out in 2048-sample stereo blocks.
+// passes to GetVideoData; audio is handed out in 2048-sample stereo blocks. A movie with an HD
+// version in the texture pack (movies/<name>.h264: H.264 at a whole multiple of 480x272, the same
+// frames) has each frame's HD picture drawn in its place (runtime/hdmovie.c). One file for every PSP
+// port, kept in sync by hand (only the line with the ports' own FPS switch differs).
 #include <libavcodec/avcodec.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "hdmovie.h"
 #include "hle.h"
 #include "rt.h"
 
@@ -67,7 +71,9 @@ typedef struct {
 	uint64_t start_us;
 	bool video_done;
 	bool skip;  // ends as soon as it starts (rt_psmf_skip_next)
+	bool hide;  // plays black and silent (rt_psmf_hide_next)
 	uint64_t log_us;
+	HdMovie hd;  // its HD version (texture pack: movies/<name>.h264)
 } Player;
 
 static Player players[4];
@@ -93,6 +99,7 @@ static Player *alloc(uint32_t addr) {
 }
 
 static void player_close(Player *p) {
+	hdmovie_close(&p->hd);
 	if (p->vctx) avcodec_free_context(&p->vctx);
 	if (p->actx) avcodec_free_context(&p->actx);
 	if (p->parser) av_parser_close(p->parser);
@@ -257,7 +264,7 @@ static bool next_video_frame(Player *p) {
 
 static uint8_t clamp8(int v) { return (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v); }
 
-// Where movie frames went lately (rt_psmf_frame_at: the texture catalog and the movie log leave them out).
+// Where movie frames went lately (rt_psmf_frame_at: the texture catalog leaves them out).
 static struct { uint32_t addr, bytes; uint64_t us; } recent[4];
 bool rt_psmf_frame_at(uint32_t addr) {
 	uint64_t now = rt_now_us();
@@ -278,6 +285,11 @@ static void write_frame(Player *p, uint32_t dst, int stride) {
 		recent[i].addr = dst & 0x0FFFFFFFu, recent[i].bytes = (uint32_t)(stride * h * 4), recent[i].us = rt_now_us();
 	}
 	uint32_t *o = (uint32_t *)MP(dst);
+	if (p->hide) {
+		for (int y = 0; y < h; y++)
+			for (int x = 0; x < w; x++) o[y * stride + x] = 0xFF000000u;
+		return;
+	}
 	for (int y = 0; y < h; y++) {
 		const uint8_t *Y = f->data[0] + y * f->linesize[0];
 		const uint8_t *U = f->data[1] + (y / 2) * f->linesize[1];
@@ -289,6 +301,11 @@ static void write_frame(Player *p, uint32_t dst, int stride) {
 			uint8_t b = clamp8((c + 516 * d + 128) >> 8);
 			o[y * stride + x] = 0xFF000000u | ((uint32_t)b << 16) | ((uint32_t)g << 8) | r;
 		}
+	}
+	// its HD picture (a whole multiple of the frame's size), drawn in its place
+	if (w > 0 && h > 0 && p->frame_index) {
+		uint32_t a = dst & 0x0FFFFFFFu;
+		if (!hdmovie_show(&p->hd, (int)p->frame_index - 1, a, w, h) && hdmovie_forget(&p->hd, a)) ge_movie_hd(a, NULL, 0, 0, 0, 0);
 	}
 }
 
@@ -325,8 +342,14 @@ static void audio_delivered(Player *p) {
 
 // ---- HLE ----------------------------------------------------------------------------------
 // Mods can have the next movie end as soon as it starts (the opening at boot).
-static bool skip_next;
+static bool skip_next, hide_next;
 void rt_psmf_skip_next(void) { skip_next = true; }
+void rt_psmf_hide_next(void) { hide_next = true; }
+bool rt_psmf_hidden_playing(void) {
+	for (int i = 0; i < 4; i++)
+		if (players[i].addr && players[i].hide && players[i].state == ST_PLAYING) return true;
+	return false;
+}
 
 void hle_scePsmfPlayerCreate(CPU *c) {
 	Player *p = alloc(A0);
@@ -359,8 +382,16 @@ void hle_scePsmfPlayerSetPsmf(CPU *c) {
 		return;
 	}
 	p->state = ST_STANDBY;
+	{  // its HD version: movies/<the file's name without .pmf>.h264
+		const char *b = strrchr(path, '/');
+		b = b ? b + 1 : path;
+		char name[64];
+		snprintf(name, sizeof name, "%.*s", (int)strcspn(b, "."), b);
+		hdmovie_init(&p->hd, name);
+	}
 	p->skip = skip_next;
-	skip_next = false;
+	p->hide = hide_next;
+	skip_next = hide_next = false;
 	rt_log("scePsmfPlayerSetPsmf(%s): %u bytes, %.1f s%s", path, size, (p->last_ts - p->first_ts) / 90000.0,
 	       p->skip ? " (skipped)" : "");
 	RET(0);
@@ -470,6 +501,7 @@ void hle_scePsmfPlayerGetAudioData(CPU *c) {
 					}
 				}
 				buf_consume(&p->audio_es, fsize);
+				if (p->hide && out) memset(MP(out), 0, 0x2000);
 				audio_delivered(p);
 				RET(0);
 				return;
@@ -514,3 +546,21 @@ void hle_scePsmfPlayerChangePlayMode(CPU *c) { RET(0); }
 void hle_scePsmfPlayerConfigPlayer(CPU *c) { RET(0); }
 void hle_sceMpegInit(CPU *c) { RET(0); }
 void hle_sceMpegFinish(CPU *c) { RET(0); }
+
+void hle_scePsmfPlayerSetPsmfCB(CPU *c) { hle_scePsmfPlayerSetPsmf(c); }
+
+// (player, u64 *pts): the shown video frame's time stamp (90 kHz)
+void hle_scePsmfPlayerGetCurrentPts(CPU *c) {
+	Player *p = find(A0);
+	if (!p || p->state < ST_STANDBY) {
+		RET(0x80616001u);  // SCE_PSMFPLAYER_ERROR_INVALID_STATUS
+		return;
+	}
+	if (!p->have_frame) {
+		RET(ERR_NO_DATA);
+		return;
+	}
+	M32(A1) = (uint32_t)p->frame_pts;
+	M32(A1 + 4) = (uint32_t)((uint64_t)p->frame_pts >> 32);
+	RET(0);
+}

@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 
 #include "funcs.h"
+#include "prices.h"
 #include "rt.h"
 #include "text.h"
 
@@ -113,7 +114,12 @@ void f_08983f14(CPU *c) {
 		if (k < 0) return;
 		if (k > 0) c->fpr.f[12] += shift;
 	}
+	// The Papel Shop's balloon: its price is painted over (mods/prices.c).
+	bool balloon = c->r[5] && !strcmp((const char *)MP(c->r[5]), "costinfo");
+	uint32_t atlas = c->r[4];
+	float x = c->fpr.f[12], y = c->fpr.f[13];
 	f_08983f14_orig(c);
+	if (balloon) prices_sprite_drawn(c, atlas, x, y);
 }
 
 void f_08984678(CPU *c) {

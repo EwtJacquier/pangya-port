@@ -16,6 +16,7 @@
 #include <stdlib.h>
 
 #include "funcs.h"
+#include "prices.h"
 #include "rt.h"
 
 #define GAMEDATA 0x08b60030u
@@ -72,5 +73,15 @@ static void with_top_class(CPU *c, void (*orig)(CPU *)) {
 	M8(g + CLASS) = cls;
 }
 
-void f_08a5d718(CPU *c) { with_top_class(c, f_08a5d718_orig); }
-void f_08a5e4f4(CPU *c) { with_top_class(c, f_08a5e4f4_orig); }
+// Both also cut the prices (mods/prices.c).
+void f_08a5d718(CPU *c) {
+	uint32_t shop = c->r[4];
+	with_top_class(c, f_08a5d718_orig);
+	shop_prices(shop, 0x9fcu);
+}
+
+void f_08a5e4f4(CPU *c) {
+	uint32_t shop = c->r[4];
+	with_top_class(c, f_08a5e4f4_orig);
+	shop_prices(shop, 0xa04u);
+}

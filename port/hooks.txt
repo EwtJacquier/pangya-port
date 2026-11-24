@@ -9,8 +9,8 @@
 08984678  # draw a UI sprite by name, with alpha -> mods/autoload.c (only while the title draws)
 088661cc  # is an input action pressed (by name) -> mods/autoload.c (the title's d-pad)
 089e9570  # out-game scene update (every frame in the menus) -> mods/unlock.c
-08a5d718  # shop: builds the costume list -> mods/unlock.c (every item listed)
-08a5e4f4  # shop: builds the other categories' lists -> mods/unlock.c
+08a5d718  # shop: builds the costume list -> mods/unlock.c (every item listed; mods/prices.c: cheaper)
+08a5e4f4  # shop: builds the other categories' lists -> mods/unlock.c (every item listed; mods/prices.c: cheaper)
 088c45c0  # network round update (sends / takes in the players' state) -> mods/netplay.c (scores on the right hole)
 08b04438  # ad hoc: receive one message per player slot -> mods/netplay.c (reads them during the round update)
 08af9f64  # the game's debug printf (empty in the release build) -> mods/turns.c (PANGYA_GAME_LOG=1)
@@ -63,3 +63,4 @@
 08ac5758  # releases a resource from its cache -> mods/turns.c (tests: PANGYA_DBG_RELEASE logs one released twice)
 08ac5ed4  # ReleaseAllPets -> mods/turns.c (tests: PANGYA_DBG_RELEASE checks the manager's list first)
 088d016c  # the camera's update (CCamera, every frame) -> mods/turns.c (in turns: the player's camera on every copy)
+08a49b88  # draws the Papel Shop's scene -> mods/prices.c (its balloon's new price)

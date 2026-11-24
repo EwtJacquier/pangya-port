@@ -59,6 +59,7 @@ browser tab, and to play it together again.
   - straight to the title: no logos, no notices, no opening movie;
   - one button on the title: it loads your save, or starts a new game if you have none;
   - all 18 characters, every shop item and the whole Pangya Collection unlocked;
+  - everything in the shops (and the Papel Shop's machine) at a third of the price, rounded down;
   - network rounds that keep the right score on every hole;
   - turn-based network rounds of two to four players (everyone plays the same hole in turns,
     like a match), which the original only had in an unfinished form for two.

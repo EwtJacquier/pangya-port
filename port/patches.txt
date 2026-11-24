@@ -37,3 +37,13 @@ decl uint32_t turns_other_slot(uint32_t turn);
 088ec124  c->r[16] = turns_other_slot(c->r[16]);
 088f07d8  c->r[4] = turns_other_slot(c->r[4]);
 088f080c  c->r[5] = turns_other_slot(c->r[5]);
+
+# ---- mods/prices.c: the Papel Shop's machine (200 pang a go) ------------------------------------------
+# Its checks of the pang (the loads before `pang < 200`) and its deduction (`- 200`) take the new cost.
+decl uint32_t papel_pays(uint32_t pang);
+decl uint32_t papel_refund(void);
+08a4646c  c->r[4] = papel_pays(c->r[4]);
+08a477a8  c->r[4] = papel_pays(c->r[4]);
+08a4c324  c->r[4] = papel_pays(c->r[4]);
+08a4d330  c->r[4] = papel_pays(c->r[4]);
+08a46490  c->r[6] += papel_refund();

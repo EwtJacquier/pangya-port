@@ -169,6 +169,11 @@ the atlases redrawn, what went to the GPU. In the browser, `?guest=1` plays with
     every class-gated item (only while they build their lists; the player's class doesn't change)
     and the whole Pangya Collection gallery (4 videos, 15 artworks, 20 music tracks). The flags go
     into the save.
+  - Shop prices (`mods/prices.c`, `PANGYA_MOD_PRICES=0` turns it off, `=n` divides by n): everything
+    in the shops costs a third of the game's price, rounded down to a round number (the Costume and
+    Equipment shops; a go at the Papel Shop's machine, 200 pang in the game's code and in its
+    balloon's picture, is 65, its words written again over the balloon). `PANGYA_TEST_PANG=n`
+    (tests) gives the player n pang when a shop opens, `PANGYA_SHOP_LOG=1` logs the lists.
   - The yards over the club's landing mark (`mods/spot.c`, `PANGYA_MOD_YARDS=0` turns it off):
     with the camera behind the player the game wrote them as letters in the course, small and far
     away, and their dark outline went pale and blurred; they are drawn as the view from above
